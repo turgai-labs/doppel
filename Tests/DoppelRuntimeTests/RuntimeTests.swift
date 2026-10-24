@@ -12,7 +12,7 @@ struct RuntimeTests {
         "a program prints what Swift's build of it prints",
         arguments: [
             "Values", "Collections", "Flow", "Characters", "Protocols", "Integers", "Strings", "Functional",
-            "Foundation", "Nesting", "Optionals", "Results", "EnumSelf", "NilLiterals",
+            "Foundation", "Nesting", "Optionals", "Results", "EnumSelf", "NilLiterals", "AsyncSequences", "NestedGenerics", "Metatypes", "Streams",
         ])
     func printsAsSwiftDoes(_ name: String) async throws {
         let code = try String(contentsOf: Self.programs.appendingPathComponent("\(name).swift"), encoding: .utf8)

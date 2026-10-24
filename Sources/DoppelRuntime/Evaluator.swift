@@ -162,10 +162,7 @@ package final class Evaluator {
             guard let value else { return .returned(.void) }
             return .returned(try await evaluate(value, in: frame))
         case .throw(let value):
-            let thrown = try await evaluate(value, in: frame)
-            nextThrown += 1
-            thrownValues[nextThrown] = thrown
-            throw Thrown(type: Self.typeName(of: thrown), value: try portable(thrown, as: .dynamic), id: nextThrown)
+            throw try thrown(try await evaluate(value, in: frame))
         case .break:
             return .broke
         case .continue:
@@ -284,6 +281,8 @@ package final class Evaluator {
             return frame.frame(local.depth).slots[local.slot]
         case .selfValue:
             return frame.selfFrame.selfValue ?? .void
+        case .metatype(let type):
+            return .metatype(type)
         case .global(let name):
             return try await global(name, as: typed.type)
         case .stored(let base, let index):
@@ -631,6 +630,13 @@ package final class Evaluator {
         case .string(let text)?: return .string(text)
         case nil: return nil
         }
+    }
+
+    /// `value` thrown, as a `throw` throws it: whoever catches it in the same code gets it back.
+    func thrown(_ value: Value) throws -> Thrown {
+        nextThrown += 1
+        thrownValues[nextThrown] = value
+        return Thrown(type: Self.typeName(of: value), value: try portable(value, as: .dynamic), id: nextThrown)
     }
 
     // MARK: Tasks

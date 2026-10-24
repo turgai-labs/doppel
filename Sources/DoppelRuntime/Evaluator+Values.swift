@@ -170,6 +170,7 @@ extension Evaluator {
         case .string(let text): text
         case .character(let character): String(character)
         case .structure("Unicode.Scalar", let fields): (try? Self.unicodeScalar(fields)).map { String($0) } ?? ""
+        case .metatype(let type): type.printedName
 
         default: debugDescribe(value, top: true)
         }
@@ -217,6 +218,10 @@ extension Evaluator {
         case .function: return "(Function)"
         case .duration(let duration): return "\(duration)"
         case .task: return "Task"
+        case .metatype(let type): return type.printedName
+        case .stream: return "AsyncStream"
+        case .continuation: return "AsyncStream.Continuation"
+        case .streamIterator: return "AsyncStream.Iterator"
         case .date, .decimal, .uuid, .url: return Self.foundationDescription(value) ?? ""
         }
     }

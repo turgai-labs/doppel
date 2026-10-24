@@ -8,6 +8,12 @@ extension Resolver {
     /// resolve.
     func expression(_ expr: ExprSyntax, expecting expected: SwiftType?) -> Typed? {
         // An optional chain: the rest of it reads its base's value, when it has one.
+        // A type as a value, `String?.self` among them, which isn't an optional chain.
+        if let member = expr.as(MemberAccessExprSyntax.self), member.declName.baseName.text == "self",
+            let base = member.base, let type = writtenType(base)
+        {
+            return Typed(.metatype(type), .metatype(type))
+        }
         if !expr.is(OptionalChainingExprSyntax.self), let chain = Self.chain(in: expr), chains[chain.id] == nil {
             guard let base = expression(chain.expression, expecting: nil) else { return nil }
             if base.type == .unresolved { return Typed(.read(base, ""), .unresolved) }
@@ -448,11 +454,46 @@ extension Resolver {
         if name == "init", let typeName = typeName(of: baseSyntax) {
             return initializerValue(typeName, expecting: expected, at: member)
         }
+        if name == "self", let type = writtenType(baseSyntax) {
+            return Typed(.metatype(type), .metatype(type))
+        }
         if let typeName = typeName(of: baseSyntax) {
             return staticMember(name, of: typeName, arguments: nil, expecting: expected, at: member)
         }
         guard let base = expression(baseSyntax, expecting: nil) else { return nil }
         return self.member(name, of: base, at: member.declName)
+    }
+
+    /// The type an expression is written as, when it's one, read as a type is: `Int`, `T`, `[Int]`,
+    /// `Box<Int>` before `.self`. A value, such as a local, is a value.
+    func writtenType(_ expr: ExprSyntax) -> SwiftType? {
+        func namesType(_ expr: ExprSyntax) -> Bool {
+            if typeName(of: expr) != nil { return true }
+            if let reference = expr.as(DeclReferenceExprSyntax.self) {
+                let name = reference.baseName.text
+                return context.lookup(name) == nil && context.typeBindingsInScope[name] != nil
+            }
+            if let specialized = expr.as(GenericSpecializationExprSyntax.self) {
+                return namesType(specialized.expression)
+            }
+            if let array = expr.as(ArrayExprSyntax.self), array.elements.count == 1 {
+                return namesType(array.elements.first!.expression)
+            }
+            if let dictionary = expr.as(DictionaryExprSyntax.self),
+                case .elements(let elements) = dictionary.content, elements.count == 1
+            {
+                return namesType(elements.first!.key) && namesType(elements.first!.value)
+            }
+            if let optional = expr.as(OptionalChainingExprSyntax.self) { return namesType(optional.expression) }
+            return false
+        }
+        guard namesType(expr) else { return nil }
+        let parsed = Parser.parse(source: "let _: \(expr.trimmedDescription)")
+        guard let variable = parsed.statements.first?.item.as(VariableDeclSyntax.self),
+            let type = variable.bindings.first?.typeAnnotation?.type
+        else { return nil }
+        let resolved = resolveWritten(type)
+        return resolved == .unresolved ? nil : resolved
     }
 
     /// The type an expression names, when it names one: `Item` in `Item.text`.

@@ -94,6 +94,9 @@ package struct Property {
     package let syntax: Syntax?
     /// A computed property's getter, as a function taking nothing.
     package let getter: Function?
+    /// Whether it's set without changing the value it's on, `{ get nonmutating set }`: set even on
+    /// a constant, as a continuation's `onTermination` is.
+    package var isNonmutatingSet = false
 }
 
 /// A function, method or initializer, as declared.

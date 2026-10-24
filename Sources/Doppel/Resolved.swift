@@ -118,6 +118,8 @@ package indirect enum Expression {
     case local(Local)
     case selfValue
     case global(String)
+    /// A type as a value: `Int.self`.
+    case metatype(SwiftType)
     /// A stored property, by its index in its type.
     case stored(Typed, index: Int)
     /// A computed property's getter, on its value.

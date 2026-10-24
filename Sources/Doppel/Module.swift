@@ -94,15 +94,18 @@ final class Module {
             redeclared.append((Syntax(item), name))
             return
         }
+        // A type nested in a generic type has that type's generic parameters, then its own: Swift's
+        // `AsyncStream<Int>.Continuation` is a continuation of `Int`s.
+        let outerGenerics = outer.flatMap { types[$0] }.map { $0.kind == .protocol ? [] : $0.generics } ?? []
         if let decl = item.as(StructDeclSyntax.self) {
             types[name] = TypeDeclaration(
                 name: name, kind: standard ? .standard : .structure,
-                generics: Self.generics(decl.genericParameterClause),
+                generics: outerGenerics + Self.generics(decl.genericParameterClause),
                 file: file, syntax: DeclSyntax(decl))
         } else if let decl = item.as(EnumDeclSyntax.self) {
             types[name] = TypeDeclaration(
-                name: name, kind: .enumeration, generics: Self.generics(decl.genericParameterClause), file: file,
-                syntax: DeclSyntax(decl))
+                name: name, kind: .enumeration, generics: outerGenerics + Self.generics(decl.genericParameterClause),
+                file: file, syntax: DeclSyntax(decl))
         } else if let decl = item.as(ActorDeclSyntax.self) {
             types[name] = TypeDeclaration(name: name, kind: .actor, file: file, syntax: DeclSyntax(decl))
         } else if let decl = item.as(ProtocolDeclSyntax.self) {
@@ -343,11 +346,20 @@ final class Module {
                     name: name, parameters: [], result: type ?? .any, effects: effects, isStatic: isStatic,
                     owner: owner.name,
                     syntax: Syntax(binding), requirements: constraints)
-            return Property(
+            var property = Property(
                 name: name, typing: typing, mutable: mutable && isStored || !isStored && Self.hasSetter(binding),
                 isStored: isStored, isStatic: isStatic,
                 hasValue: binding.initializer != nil || (type?.isOptional == true && mutable),
                 effects: effects, syntax: Syntax(binding), getter: getter)
+            property.isNonmutatingSet = Self.hasNonmutatingSetter(binding)
+            return property
+        }
+    }
+
+    private static func hasNonmutatingSetter(_ binding: PatternBindingSyntax) -> Bool {
+        guard case .accessors(let list)? = binding.accessorBlock?.accessors else { return false }
+        return list.contains {
+            $0.accessorSpecifier.tokenKind == .keyword(.set) && $0.modifier?.name.tokenKind == .keyword(.nonmutating)
         }
     }
 
@@ -515,6 +527,9 @@ final class Module {
         if let attributed = syntax.as(AttributedTypeSyntax.self) {
             return resolve(attributed.baseType, generics: generics, file: file, scope: scope)
         }
+        if let metatype = syntax.as(MetatypeTypeSyntax.self), metatype.metatypeSpecifier.text == "Type" {
+            return .metatype(resolve(metatype.baseType, generics: generics, file: file, scope: scope))
+        }
         if let existential = syntax.as(SomeOrAnyTypeSyntax.self) {
             return .existential(protocols(in: existential.constraint, scope: scope))
         }
@@ -522,13 +537,33 @@ final class Module {
             return .existential(protocols(in: TypeSyntax(composition), scope: scope))
         }
         if let member = syntax.as(MemberTypeSyntax.self) {
+            // A type nested in a generic one, named through it: `AsyncStream<Int>.Continuation` has
+            // the base's arguments, then its own.
+            if let base = member.baseType.as(IdentifierTypeSyntax.self), base.genericArgumentClause != nil,
+                case .named(let outer, let outerArguments) = resolve(
+                    member.baseType, generics: generics, file: file, scope: scope),
+                let nested = types["\(outer).\(member.name.text)"]
+            {
+                let own =
+                    member.genericArgumentClause?.arguments.compactMap { argument -> SwiftType? in
+                        guard case .type(let type) = argument.argument else { return nil }
+                        return resolve(type, generics: generics, file: file, scope: scope)
+                    } ?? []
+                return nested.kind == .protocol
+                    ? .existential([nested.name]) : .named(nested.name, arguments: outerArguments + own)
+            }
             if generics.contains(member.baseType.trimmedDescription) {
                 return .parameter("\(member.baseType.trimmedDescription).\(member.name.text)")
             }
-            // A nested type, named with what it's in: that's looked up where it's written.
+            // A nested type, named with what it's in: that's looked up where it's written. One nested
+            // in a generic type, named where that type's parameters are in scope, has them.
             let outer = lookup(member.baseType.trimmedDescription, in: scope) ?? member.baseType.trimmedDescription
             if let nested = types["\(outer).\(member.name.text)"] {
-                return nested.kind == .protocol ? .existential([nested.name]) : .named(nested.name)
+                if nested.kind == .protocol { return .existential([nested.name]) }
+                let inherited = nested.generics.filter(generics.contains)
+                let arguments =
+                    inherited.count == nested.generics.count ? inherited.map { SwiftType.parameter($0) } : []
+                return .named(nested.name, arguments: arguments)
             }
             // A type has only the types it declares: `Outer.Name` isn't `Name` when `Outer` is a type.
             // Anything else before the dot is a module, as in `Swift.Int`.
@@ -578,6 +613,14 @@ final class Module {
         if let alias = aliases[name] { return resolve(alias, generics: generics, file: file, scope: scope) }
         if let found = lookup(name, in: scope), let declared = types[found] {
             if declared.kind == .protocol { return .existential([found]) }
+            // A type nested in a generic one, named without its outer type's arguments where those
+            // parameters are in scope: they're its own, as in `Continuation` inside `AsyncStream`.
+            if arguments.count < declared.generics.count {
+                let inherited = declared.generics.prefix(declared.generics.count - arguments.count)
+                if inherited.allSatisfy(generics.contains) {
+                    return .named(found, arguments: inherited.map { .parameter($0) } + arguments)
+                }
+            }
             return .named(found, arguments: arguments)
         }
         unknown(name, at: identifier, in: file)

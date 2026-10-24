@@ -86,7 +86,7 @@ extension Evaluator {
         case (.duration(let duration), _):
             let (seconds, attoseconds) = duration.components
             return .double(Double(seconds) + Double(attoseconds) / 1e18)
-        case (.function, _), (.task, _):
+        case (.function, _), (.task, _), (.metatype, _), (.stream, _), (.continuation, _), (.streamIterator, _):
             throw Trap(message: "a function can't be sent to another object")
         }
     }

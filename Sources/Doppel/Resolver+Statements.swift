@@ -571,6 +571,7 @@ extension Resolver {
 
     private func forStatement(_ forStmt: ForStmtSyntax) -> Statement? {
         guard let sequence = expression(forStmt.sequence, expecting: nil) else { return nil }
+        if forStmt.awaitKeyword != nil { return forAwaitStatement(forStmt, over: sequence) }
         let element: SwiftType
         switch sequence.type {
         case .array(let type): element = type
@@ -591,6 +592,62 @@ extension Resolver {
                 body = [.if(branches: [([.boolean(condition)], body)], otherwise: nil)]
             }
             return .forIn(pattern, sequence: sequence, body: body)
+        }
+    }
+
+    /// `for await element in sequence`, as Swift defines it: the sequence's iterator, made once,
+    /// asked for its next element until it has none, each waited for, and tried when it can throw.
+    ///
+    ///     var iterator = sequence.makeAsyncIterator()
+    ///     while case let element? = await iterator.next() { … }
+    private func forAwaitStatement(_ forStmt: ForStmtSyntax, over sequence: Typed) -> Statement? {
+        guard sequence.type != .dynamic, sequence.type != .unresolved, conforms(sequence.type, to: "AsyncSequence"),
+            let sequenceName = sequence.type.declarationName, let sequenceType = module.type(named: sequenceName)
+        else {
+            report("for-in loop requires '\(sequence.type)' to conform to 'AsyncSequence'", at: forStmt.sequence)
+            return nil
+        }
+        if !context.effectsInferred, !context.effects.async, let awaitKeyword = forStmt.awaitKeyword {
+            report("'async' in a function that does not support concurrency", at: awaitKeyword)
+            return nil
+        }
+        let none = CallArguments(LabeledExprListSyntax([]), trailing: nil)
+        guard
+            let makeIterator = methodCall(
+                instanceMethods("makeAsyncIterator", of: sequence.type), of: sequenceType, on: sequence,
+                place: .expression(forStmt.sequence), arguments: none, expecting: nil, named: "makeAsyncIterator",
+                at: forStmt.sequence),
+            let iteratorName = makeIterator.type.declarationName, let iteratorType = module.type(named: iteratorName)
+        else { return nil }
+        let nexts = instanceMethods("next", of: makeIterator.type).filter { $0.parameters.isEmpty }
+        if nexts.contains(where: { $0.effects.throwing }), forStmt.tryKeyword == nil {
+            report("for-in loop can throw, but is not marked with 'try'", at: forStmt.forKeyword)
+            return nil
+        }
+        let before = context.unassigned
+        defer { context.unassigned = before }
+        return context.withScope { () -> Statement? in
+            let slot = context.declare("$iterator", type: makeIterator.type, mutable: true)
+            let iterator = Place.local(Local(depth: 0, slot: slot))
+            // The loop's own `try` and `await` mark its calls to `next()`.
+            let outer = marks
+            marks.awaited = true
+            if forStmt.tryKeyword != nil {
+                marks.tried = outer.tried == .optional || outer.tried == .forced ? outer.tried : .plain
+            }
+            let next = methodCall(
+                nexts, of: iteratorType, on: Typed(.local(Local(depth: 0, slot: slot)), makeIterator.type),
+                place: .place(iterator), arguments: none, expecting: nil, named: "next", at: forStmt.sequence)
+            marks = outer
+            guard let next, case .optional(let element) = next.type else { return nil }
+            guard let pattern = pattern(forStmt.pattern, matching: element) else { return nil }
+            var body = statements(forStmt.body.statements)
+            if let whereClause = forStmt.whereClause, let condition = booleanCondition(whereClause.condition) {
+                body = [.if(branches: [([.boolean(condition)], body)], otherwise: nil)]
+            }
+            let waited = Typed(.await(next), next.type)
+            let asked = forStmt.tryKeyword != nil ? Typed(.try(waited), next.type) : waited
+            return .block([.declare(slot, makeIterator), .while([.matches(.some(pattern), asked)], body: body)])
         }
     }
 

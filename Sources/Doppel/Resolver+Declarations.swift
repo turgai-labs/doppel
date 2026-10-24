@@ -108,8 +108,17 @@ extension Resolver {
     private func checkConformances(of type: TypeDeclaration, at name: TokenSyntax) {
         for conformance in type.conformances.sorted() {
             guard let protocolType = module.type(named: conformance), protocolType.kind == .protocol else { continue }
+            // The protocol's associated types, as the type binds them: by its own type aliases first,
+            // then as its methods meeting the requirements say, as Swift infers them.
+            var bindings = typeBindings(of: type.declaredType).filter { protocolType.associatedTypes.contains($0.key) }
+            bindings["Self"] = type.declaredType
+            let associated = Set(protocolType.associatedTypes + ["Self"])
             for requirement in protocolType.requirements {
-                guard let method = type.methods[requirement.name]?.first(where: { matches($0, requirement) }) else {
+                guard
+                    let method = type.methods[requirement.name]?.first(where: {
+                        matches($0, requirement, associated: associated, bindings: &bindings)
+                    })
+                else {
                     report("type '\(type.name)' does not conform to protocol '\(conformance)'", at: name)
                     break
                 }
@@ -124,10 +133,49 @@ extension Resolver {
         }
     }
 
-    private func matches(_ method: Function, _ requirement: Function) -> Bool {
-        method.parameters.count == requirement.parameters.count
-            && zip(method.parameters, requirement.parameters).allSatisfy { $0.label == $1.label && $0.type == $1.type }
-            && method.result == requirement.result
+    /// Whether `method` meets `requirement`, its associated types bound as they're met: one bound
+    /// already must be the same, one not yet is what the method has there. A method that doesn't
+    /// meet it binds nothing.
+    private func matches(
+        _ method: Function, _ requirement: Function, associated: Set<String>, bindings: inout [String: SwiftType]
+    ) -> Bool {
+        guard method.parameters.count == requirement.parameters.count else { return false }
+        var tried = bindings
+        for (given, required) in zip(method.parameters, requirement.parameters) {
+            guard given.label == required.label, infer(required.type, from: given.type, associated, &tried) else {
+                return false
+            }
+        }
+        guard infer(requirement.result, from: method.result, associated, &tried) else { return false }
+        bindings = tried
+        return true
+    }
+
+    /// Whether `witness` is `required` with the associated types in it bound, binding those that
+    /// aren't yet: `Element?` is `Int?` with `Element` bound to `Int`.
+    private func infer(
+        _ required: SwiftType, from witness: SwiftType, _ associated: Set<String>, _ bindings: inout [String: SwiftType]
+    ) -> Bool {
+        switch (required, witness) {
+        case (.parameter(let name), _) where associated.contains(name):
+            if let bound = bindings[name] { return bound == witness }
+            bindings[name] = witness
+            return true
+        case (.optional(let required), .optional(let witness)), (.array(let required), .array(let witness)),
+            (.inout(let required), .inout(let witness)):
+            return infer(required, from: witness, associated, &bindings)
+        case (.dictionary(let requiredKey, let requiredValue), .dictionary(let key, let value)):
+            return infer(requiredKey, from: key, associated, &bindings)
+                && infer(requiredValue, from: value, associated, &bindings)
+        case (.tuple(let required, let requiredLabels), .tuple(let witness, let labels)):
+            return required.count == witness.count && requiredLabels == labels
+                && zip(required, witness).allSatisfy { infer($0, from: $1, associated, &bindings) }
+        case (.named(let requiredName, let required), .named(let name, let witness)):
+            return requiredName == name && required.count == witness.count
+                && zip(required, witness).allSatisfy { infer($0, from: $1, associated, &bindings) }
+        default:
+            return required == witness
+        }
     }
 
     private func resolveMembers(of type: TypeDeclaration, in block: MemberBlockSyntax) {

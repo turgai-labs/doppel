@@ -9,6 +9,10 @@ extension Evaluator {
         switch (member.type, base) {
         case ("", nil): return try global(name, arguments)
         case ("Task", nil) where !name.hasPrefix("init("): return try await taskStatic(name, arguments)
+        case ("AsyncStream", nil), ("AsyncThrowingStream", nil):
+            return try await makeStream(member.type, name, arguments)
+        case (_, .stream(let box)?) where name == "makeAsyncIterator()": return .streamIterator(StreamIterator(box))
+        case (_, .continuation(let box)?): return try await continuation(member, name, box, arguments)
         case ("Duration", nil) where !name.hasPrefix("init("): return try durationStatic(name, arguments)
         case (let type, nil) where Self.foundationTypes.contains(type):
             return name.hasPrefix("init(")
@@ -80,6 +84,11 @@ extension Evaluator {
 
     func mutating(_ member: StandardMember, _ value: inout Value, _ arguments: [Value]) async throws -> Value {
         switch value {
+        case .streamIterator(let iterator) where member.member == "next()":
+            // Each waits for the stream's next value, or `nil` once it's finished.
+            let next = try await iterator.box.next()
+            try await ended(iterator.box)
+            return .optional(next)
         case .array(var elements):
             defer { value = .array(elements) }
             switch member.member {
@@ -521,6 +530,96 @@ extension Evaluator {
         case "uppercased()": return .string(character.uppercased())
         case "lowercased()": return .string(character.lowercased())
         default: throw Trap(message: "'Character.\(name)' isn't run by Doppel yet")
+        }
+    }
+
+    // MARK: Streams
+
+    /// A stream made as Swift makes one: given to code that yields to it, or with its continuation.
+    private func makeStream(_ kind: String, _ name: String, _ arguments: [Value]) async throws -> Value {
+        switch name {
+        case "init(_:)":
+            return try await built(StreamBox(kind: kind), arguments[0])
+        case "init(_:_:)":
+            return try await built(StreamBox(kind: kind), arguments[1])
+        case "init(bufferingPolicy:_:)":
+            return try await built(StreamBox(kind: kind, limit: try limit(arguments[0])), arguments[1])
+        case "init(_:bufferingPolicy:_:)":
+            return try await built(StreamBox(kind: kind, limit: try limit(arguments[1])), arguments[2])
+        case "makeStream(of:)":
+            let box = StreamBox(kind: kind)
+            return .tuple([.stream(box), .continuation(box)])
+        case "makeStream(of:bufferingPolicy:)":
+            let box = StreamBox(kind: kind, limit: try limit(arguments[1]))
+            return .tuple([.stream(box), .continuation(box)])
+        default: throw Trap(message: "'AsyncStream.\(name)' isn't run by Doppel yet")
+        }
+    }
+
+    /// The stream's handler, called once with why it ended, if it just did: then it's let go, as
+    /// Swift lets go of it.
+    private func ended(_ box: StreamBox) async throws {
+        guard let reason = box.takeEnded(), let handler = box.onTermination else { return }
+        box.onTermination = nil
+        let termination = "\(box.kind).Continuation.Termination"
+        switch reason {
+        case .cancelled: _ = try await apply(handler, .enumCase(termination, "cancelled", []))
+        case .finished(let error):
+            let values: [Value] = box.kind == "AsyncThrowingStream" ? [.optional(error)] : []
+            _ = try await apply(handler, .enumCase(termination, "finished", values))
+        }
+    }
+
+    /// A stream, given first to the code that yields to it.
+    private func built(_ box: StreamBox, _ build: Value) async throws -> Value {
+        _ = try await apply(build, .continuation(box))
+        return .stream(box)
+    }
+
+    /// The limit a `BufferingPolicy` says.
+    private func limit(_ policy: Value) throws -> StreamBox.Limit {
+        switch policy {
+        case .enumCase(_, "unbounded", _): return .unbounded
+        case .enumCase(_, "bufferingOldest", let values): return .oldest(max(0, try int(values[0])))
+        case .enumCase(_, "bufferingNewest", let values): return .newest(max(0, try int(values[0])))
+        default: throw Trap(message: "not a BufferingPolicy")
+        }
+    }
+
+    /// What a stream's continuation does: a value given to whoever waits, or the stream finished.
+    private func continuation(
+        _ member: StandardMember, _ name: String, _ box: StreamBox, _ arguments: [Value]
+    ) async throws -> Value {
+        let result = "\(member.type).YieldResult"
+        switch name {
+        case "yield(_:)":
+            switch box.yield(arguments[0]) {
+            case .enqueued(let remaining): return .enumCase(result, "enqueued", [.int(remaining)])
+            case .dropped(let value): return .enumCase(result, "dropped", [value])
+            case .terminated: return .enumCase(result, "terminated", [])
+            }
+        case "finish()":
+            box.finish()
+            try await ended(box)
+            return .void
+        case "finish(throwing:)":
+            if case .optional(let error?) = arguments[0] {
+                box.finish(throwing: try thrown(error), error: error)
+            } else {
+                box.finish()
+            }
+            try await ended(box)
+            return .void
+        case "onTermination":
+            return .optional(box.onTermination)
+        case "onTermination=":
+            if case .optional(let handler) = arguments[0] {
+                box.onTermination = handler
+            } else {
+                box.onTermination = arguments[0]
+            }
+            return .void
+        default: throw Trap(message: "'\(member.type).\(name)' isn't run by Doppel yet")
         }
     }
 

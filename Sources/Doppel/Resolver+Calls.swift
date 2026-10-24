@@ -255,9 +255,11 @@ extension Resolver {
     enum Receiver {
         case selfPlace
         case expression(ExprSyntax)
+        /// A place the code doesn't write, such as a `for await` loop's iterator.
+        case place(Place)
     }
 
-    private func methodCall(
+    func methodCall(
         _ candidates: [Function], of type: TypeDeclaration, on base: Typed, place receiver: Receiver,
         arguments: CallArguments,
         expecting expected: SwiftType?, named name: String, at node: some SyntaxProtocol
@@ -290,6 +292,8 @@ extension Resolver {
             case .expression(let syntax):
                 guard let (resolved, _) = self.place(syntax, mutating: name) else { return nil }
                 place = resolved
+            case .place(let given):
+                place = given
             }
             return Typed(.mutating(place, callee, resolvedArguments), result)
         }
@@ -414,10 +418,19 @@ extension Resolver {
             report("'\(typeName)' cannot be constructed because it has no accessible initializers", at: node)
             return nil
         }
+        var bindings = typeBindings(of: type.declaredType).filter { !$0.value.isOpen }
+        // A type nested in a generic one, made inside it: the outer type's parameters are its own
+        // there, as `Label(…)` inside `Box<Value>` is a `Box<Value>.Label`.
+        if let selfType = context?.selfType, let dot = typeName.lastIndex(of: "."),
+            case let outerName = String(typeName[..<dot]),
+            selfType.name == outerName || selfType.name.hasPrefix(outerName + "."),
+            let outer = module.type(named: outerName)
+        {
+            for name in outer.generics where bindings[name] == nil { bindings[name] = .parameter(name) }
+        }
         guard
             let (function, resolvedArguments, result) = applied(
-                candidates, bindings: typeBindings(of: type.declaredType).filter { !$0.value.isOpen },
-                arguments: arguments, expecting: expected,
+                candidates, bindings: bindings, arguments: arguments, expecting: expected,
                 named: "init", at: node)
         else { return nil }
         markEffects(of: function, arguments: resolvedArguments, at: node)
@@ -445,8 +458,9 @@ extension Resolver {
                 isVariadic: false, isInout: false,
                 defaultValue: property.syntax?.as(PatternBindingSyntax.self)?.initializer?.value)
         }
+        // What it makes is the type with its generic parameters, as an initializer it declares makes.
         return Function(
-            name: "init", parameters: parameters, result: .named(type.name), effects: .none, owner: type.name,
+            name: "init", parameters: parameters, result: type.declaredType, effects: .none, owner: type.name,
             syntax: nil)
     }
 
@@ -552,6 +566,12 @@ extension Resolver {
         expecting expected: SwiftType?, at node: some SyntaxProtocol
     ) -> (Function, [Argument], SwiftType)? {
         var bindings = initial
+        // What a `where` fixes to a type is that type from the start: `Failure == any Error` before
+        // any argument is read as what its parameter takes.
+        for case .same(let parameter, let type) in function.requirements
+        where !parameter.contains(".") && bindings[parameter] == nil && !type.substituting(bindings).isOpen {
+            bindings[parameter] = type.substituting(bindings)
+        }
         // An expected existential says nothing of a generic result: it takes whatever's inferred.
         if let expected, function.result.substituting(bindings).isOpen, !Self.saysNothing(expected) {
             function.result.substituting(bindings).bind(to: expected, into: &bindings)
@@ -814,6 +834,23 @@ extension Resolver {
         let op = infix.operator.as(BinaryOperatorExprSyntax.self)?.operator.text
         if left.is(DiscardAssignmentExprSyntax.self) {
             return expression(right, expecting: nil).map(Statement.expression)
+        }
+        // A standard type's property set without changing the value it's on: its setter, called on
+        // the value, which needn't be a place.
+        if op == nil, let member = left.as(MemberAccessExprSyntax.self), let baseSyntax = member.base,
+            typeName(of: baseSyntax) == nil,
+            let base = speculate({ expression(baseSyntax, expecting: nil) }),
+            let typeName = base.type.declarationName, let type = module.type(named: typeName), type.kind == .standard,
+            let (property, declaring) = instanceProperty(member.declName.baseName.text, of: base.type),
+            property.isNonmutatingSet
+        {
+            guard let base = expression(baseSyntax, expecting: nil) else { return nil }
+            let propertyType = propertyType(property, of: declaring).substituting(typeBindings(of: base.type))
+            guard let value = expression(right, expecting: propertyType),
+                let converted = convert(value, to: propertyType, at: right, as: .assigned)
+            else { return nil }
+            let setter = StandardMember(type: typeName, member: "\(property.name)=")
+            return .expression(Typed(.standard(setter, on: base, [.value(converted)]), .void))
         }
         guard let (place, type) = place(left, mutating: nil) else {
             _ = expression(right, expecting: nil)

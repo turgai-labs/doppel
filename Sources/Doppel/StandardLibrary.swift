@@ -224,6 +224,80 @@ enum StandardLibrary {
             static func milliseconds(_ milliseconds: Int) -> Duration
         }
 
+        /// Values yielded to it one at a time, each waited for by whoever loops over it.
+        struct AsyncStream<Element>: AsyncSequence {
+            struct Continuation: Sendable {
+                /// How many values it keeps for whoever loops over it, and which it drops past that.
+                enum BufferingPolicy {
+                    case unbounded
+                    case bufferingOldest(Int)
+                    case bufferingNewest(Int)
+                }
+                enum YieldResult {
+                    case enqueued(remaining: Int)
+                    case dropped(Element)
+                    case terminated
+                }
+                /// Why the stream ended: finished, or the task looping over it cancelled.
+                enum Termination {
+                    case finished
+                    case cancelled
+                }
+                @discardableResult func yield(_ value: Element) -> YieldResult
+                func finish()
+                /// Called once, when the stream ends.
+                var onTermination: (@Sendable (Termination) -> Void)? { get nonmutating set }
+            }
+            struct Iterator: AsyncIteratorProtocol {
+                mutating func next() async -> Element?
+            }
+            init(_ build: (Continuation) -> Void)
+            init(_ elementType: Element.Type, _ build: (Continuation) -> Void)
+            init(bufferingPolicy limit: Continuation.BufferingPolicy, _ build: (Continuation) -> Void)
+            init(_ elementType: Element.Type, bufferingPolicy limit: Continuation.BufferingPolicy, _ build: (Continuation) -> Void)
+            static func makeStream(of elementType: Element.Type, bufferingPolicy limit: Continuation.BufferingPolicy = .unbounded) -> (stream: AsyncStream<Element>, continuation: Continuation)
+            func makeAsyncIterator() -> Iterator
+        }
+
+        /// An `AsyncStream` that can end with an error, which the loop over it throws.
+        struct AsyncThrowingStream<Element, Failure: Error>: AsyncSequence {
+            struct Continuation: Sendable {
+                /// How many values it keeps for whoever loops over it, and which it drops past that.
+                enum BufferingPolicy {
+                    case unbounded
+                    case bufferingOldest(Int)
+                    case bufferingNewest(Int)
+                }
+                enum YieldResult {
+                    case enqueued(remaining: Int)
+                    case dropped(Element)
+                    case terminated
+                }
+                /// Why the stream ended: finished, with the error it ended with if any, or the task
+                /// looping over it cancelled.
+                enum Termination {
+                    case finished(Failure?)
+                    case cancelled
+                }
+                @discardableResult func yield(_ value: Element) -> YieldResult
+                func finish(throwing error: Failure? = nil)
+                /// Called once, when the stream ends.
+                var onTermination: (@Sendable (Termination) -> Void)? { get nonmutating set }
+            }
+            struct Iterator: AsyncIteratorProtocol {
+                mutating func next() async throws -> Element?
+            }
+            func makeAsyncIterator() -> Iterator
+        }
+
+        extension AsyncThrowingStream where Failure == any Error {
+            init(_ build: (Continuation) -> Void)
+            init(_ elementType: Element.Type, _ build: (Continuation) -> Void)
+            init(bufferingPolicy limit: Continuation.BufferingPolicy, _ build: (Continuation) -> Void)
+            init(_ elementType: Element.Type, bufferingPolicy limit: Continuation.BufferingPolicy, _ build: (Continuation) -> Void)
+            static func makeStream(of elementType: Element.Type, bufferingPolicy limit: Continuation.BufferingPolicy = .unbounded) -> (stream: AsyncThrowingStream<Element, any Error>, continuation: Continuation)
+        }
+
         struct Task: Sendable {
             init(operation: @escaping () async throws -> Void)
             func cancel()
@@ -247,6 +321,19 @@ enum StandardLibrary {
 
         protocol Sequence {
             associatedtype Element
+        }
+
+        /// What a `for await` loop asks for each element: the next, or `nil` once there are no more.
+        protocol AsyncIteratorProtocol {
+            associatedtype Element
+            mutating func next() async throws -> Element?
+        }
+
+        /// Values that come one at a time, each waited for: what `for await` loops over.
+        protocol AsyncSequence {
+            associatedtype Element
+            associatedtype AsyncIterator: AsyncIteratorProtocol
+            func makeAsyncIterator() -> AsyncIterator
         }
 
         protocol Collection: Sequence {

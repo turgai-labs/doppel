@@ -14,7 +14,7 @@ import Testing
 struct DoppelAgreementTests {
     /// How many of the corpus's modules Doppel's resolver has come to agree with Swift on: it
     /// never agrees on fewer. Raise it as checking comes closer to Swift's, until it's all of them.
-    static let agreedOnAtLeast = 72
+    static let agreedOnAtLeast = 84
 
     @Test func everyCorpusModuleIsCheckedAsSwiftChecksIt() async throws {
         let compiler = try SwiftCompiler()

@@ -25,6 +25,8 @@ public indirect enum SwiftType: Hashable, Sendable, CustomStringConvertible {
     case parameter(String)
     /// A function's parameter the function may change, which its caller sees: `inout T`.
     case `inout`(SwiftType)
+    /// A type as a value: `Int.self` is of `Int.Type`.
+    case metatype(SwiftType)
     /// The answer to a message sent to an `Object` whose type isn't declared: whatever it is, read
     /// as the type it's used as, and checked when it comes. Swift can't type it; it's Doppel's.
     case dynamic
@@ -64,6 +66,11 @@ public indirect enum SwiftType: Hashable, Sendable, CustomStringConvertible {
             protocols.isEmpty ? "Any" : "any " + protocols.joined(separator: " & ")
         case .parameter(let name): name
         case .inout(let wrapped): "inout \(wrapped)"
+        case .metatype(let instance):
+            switch instance {
+            case .function, .existential, .optional: "(\(instance)).Type"
+            default: "\(instance).Type"
+            }
         case .dynamic: "Object's answer"
         case .unresolved: "<<error type>>"
         }
@@ -114,12 +121,26 @@ public indirect enum SwiftType: Hashable, Sendable, CustomStringConvertible {
         }
     }
 
+    /// How Swift names it when it's printed as a value: `Array<Int>` for `[Int].self`.
+    public var printedName: String {
+        switch self {
+        case .array(let element): "Array<\(element.printedName)>"
+        case .optional(let wrapped): "Optional<\(wrapped.printedName)>"
+        case .dictionary(let key, let value): "Dictionary<\(key.printedName), \(value.printedName)>"
+        case .named(let name, let arguments) where !arguments.isEmpty:
+            "\(name)<\(arguments.map(\.printedName).joined(separator: ", "))>"
+        case .metatype(let instance): "\(instance.printedName).Type"
+        default: description
+        }
+    }
+
     /// This type with each generic parameter as `bindings` has it.
     func substituting(_ bindings: [String: SwiftType]) -> SwiftType {
         guard !bindings.isEmpty else { return self }
         switch self {
         case .parameter(let name): return bindings[name] ?? self
         case .inout(let wrapped): return .inout(wrapped.substituting(bindings))
+        case .metatype(let instance): return .metatype(instance.substituting(bindings))
         case .optional(let wrapped): return .optional(wrapped.substituting(bindings))
         case .array(let element): return .array(element.substituting(bindings))
         case .dictionary(let key, let value):
@@ -139,7 +160,7 @@ public indirect enum SwiftType: Hashable, Sendable, CustomStringConvertible {
     var isOpen: Bool {
         switch self {
         case .parameter: true
-        case .optional(let wrapped), .inout(let wrapped): wrapped.isOpen
+        case .optional(let wrapped), .inout(let wrapped), .metatype(let wrapped): wrapped.isOpen
         case .array(let element): element.isOpen
         case .dictionary(let key, let value): key.isOpen || value.isOpen
         case .tuple(let elements, _): elements.contains(where: \.isOpen)
@@ -154,7 +175,7 @@ public indirect enum SwiftType: Hashable, Sendable, CustomStringConvertible {
     func isOpen(besides fixed: Set<String>) -> Bool {
         switch self {
         case .parameter(let name): !fixed.contains(name)
-        case .optional(let wrapped), .inout(let wrapped): wrapped.isOpen(besides: fixed)
+        case .optional(let wrapped), .inout(let wrapped), .metatype(let wrapped): wrapped.isOpen(besides: fixed)
         case .array(let element): element.isOpen(besides: fixed)
         case .dictionary(let key, let value): key.isOpen(besides: fixed) || value.isOpen(besides: fixed)
         case .tuple(let elements, _): elements.contains { $0.isOpen(besides: fixed) }
@@ -171,7 +192,8 @@ public indirect enum SwiftType: Hashable, Sendable, CustomStringConvertible {
         switch (self, actual) {
         case (.parameter(let name), _):
             if bindings[name] == nil, !actual.isOpen { bindings[name] = actual }
-        case (.optional(let declared), .optional(let actual)), (.inout(let declared), .inout(let actual)):
+        case (.optional(let declared), .optional(let actual)), (.inout(let declared), .inout(let actual)),
+            (.metatype(let declared), .metatype(let actual)):
             declared.bind(to: actual, into: &bindings)
         case (.optional(let declared), _): declared.bind(to: actual, into: &bindings)
         case (.array(let declared), .array(let actual)): declared.bind(to: actual, into: &bindings)
