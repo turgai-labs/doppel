@@ -257,6 +257,23 @@ struct ObjectRunTests {
         #expect(host.made == ["Counter(id: \"tea\")", "Counter(id: \"coffee\")"])
     }
 
+    /// A function a given file declares is the host's to run, told by its name after the type
+    /// it's a member of, so two of one name in two types are two functions.
+    @Test func aGivenFunctionIsTheHostsByItsFullName() async throws {
+        let tools =
+            "enum Tools {\n    enum Web {\n        static func send(_ text: String) async throws {}\n    }\n\n    enum Mail {\n        static func send(_ text: String) async throws {}\n    }\n}\n"
+        let digest =
+            "actor Digest {\n    func run() async throws {\n        try await Tools.Web.send(\"page\")\n        try await Tools.Mail.send(\"note\")\n    }\n}\n"
+        let host = RecordingHost()
+        let object = try await LiveActor(
+            type: "Digest", in: "Object.swift",
+            of: [SwiftCheck.File(name: "Tools.swift", code: tools), SwiftCheck.File(name: "Object.swift", code: digest)],
+            module: "Objects", host: host)
+        _ = try await object.call("run", arguments: [])
+        #expect(host.sent.map(\.message) == ["Tools.Web.send", "Tools.Mail.send"])
+        #expect(host.sent.map { $0.arguments.first?.value } == [.string("page"), .string("note")])
+    }
+
     /// One actor runs here, made with the arguments it's given: another of its own type, made by
     /// its code, is another object, the host's.
     @Test func anotherOfItsOwnTypeIsTheHosts() async throws {

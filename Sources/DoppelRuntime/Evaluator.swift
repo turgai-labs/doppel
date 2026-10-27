@@ -293,7 +293,7 @@ package final class Evaluator {
             let values = try await self.arguments(arguments, in: frame)
             if !program.runsHere(function.declaration.syntax) {
                 return try await hostCall(
-                    function.declaration.name, function.declaration.parameters.map(\.label), values,
+                    function.declaration.qualifiedName, function.declaration.parameters.map(\.label), values,
                     function.declaration.parameters.map(\.type), answering: typed.type)
             }
             var base: Value?

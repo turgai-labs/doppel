@@ -153,6 +153,9 @@ package final class Function {
         self.requirements = requirements
     }
 
+    /// Its name after the type it's a member of, if it's one's: `Tools.Web.fetch`.
+    package var qualifiedName: String { owner.map { "\($0).\(name)" } ?? name }
+
     /// How it's written to be called: `insert(_:at:)`.
     package var written: String { "\(name)(\(parameters.map { "\($0.label ?? "_"):" }.joined()))" }
 

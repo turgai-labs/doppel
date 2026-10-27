@@ -18,7 +18,8 @@ public protocol ActorHost: AnyObject {
     /// An actor a given file declares, made with the arguments its initializer was called with,
     /// each with its label: the object that makes.
     func make(_ type: String, arguments: [(label: String?, value: Portable)]) async throws -> ObjectHandle
-    /// A function a given file declares, called.
+    /// A function a given file declares, called, by its name after the type it's a member of, if
+    /// it's one's: `Tools.Web.fetch`.
     func call(_ function: String, arguments: [(label: String?, value: Portable)]) async throws -> Portable
     /// A `Task { … }` the code started, which the host runs with ``LiveActor/runTask(_:)``.
     func schedule(task id: Int)
