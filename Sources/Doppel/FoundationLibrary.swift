@@ -54,6 +54,40 @@ enum FoundationLibrary {
             var scheme: String? { get }
             var description: String { get }
         }
+
+        struct Data: Hashable, Sendable, Codable, CustomStringConvertible {
+            init()
+            init<S: Sequence>(_ elements: S) where S.Element == UInt8
+            init?(base64Encoded base64String: String)
+            var count: Int { get }
+            var isEmpty: Bool { get }
+            var startIndex: Int { get }
+            var endIndex: Int { get }
+            func index(after i: Int) -> Int
+            func index(before i: Int) -> Int
+            subscript(index: Int) -> UInt8 { get set }
+            /// The bytes at the positions of a range, which reads as the data of them.
+            subscript(bounds: [Int]) -> Data { get }
+            mutating func append(_ byte: UInt8)
+            mutating func append(_ other: Data)
+            func base64EncodedString() -> String
+            var description: String { get }
+        }
+
+        extension Data: RandomAccessCollection, MutableCollection, RangeReplaceableCollection {
+            typealias Element = UInt8
+            typealias Index = Int
+            typealias SubSequence = Data
+        }
+
+        extension String {
+            struct Encoding: Hashable, Sendable {
+                static var utf8: String.Encoding { get }
+            }
+
+            init?(data: Data, encoding: String.Encoding)
+            func data(using encoding: String.Encoding, allowLossyConversion: Bool = false) -> Data?
+        }
         """
 
     /// Its Swift, its operators folded by precedence, as every file's are.

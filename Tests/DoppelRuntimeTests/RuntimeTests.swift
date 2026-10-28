@@ -151,6 +151,32 @@ struct ObjectRunTests {
         }
     }
 
+    /// Data crosses as `Codable` writes it, as base64 text, and what isn't base64 is refused as
+    /// `JSONDecoder` refuses it.
+    @Test func dataCrossesAsBase64Text() async throws {
+        let code = """
+            import Foundation
+
+            actor Echo {
+                func reversed(_ bytes: Data) -> Data {
+                    Data(bytes.reversed())
+                }
+            }
+            """
+        let object = try await LiveActor(
+            type: "Echo", in: "Echo.swift", of: [.init(name: "Echo.swift", code: code)], module: "echo",
+            host: RecordingHost())
+        let given = Data([1, 2, 3]).base64EncodedString()
+        let answer = try await object.call("reversed", arguments: [(nil, .string(given))])
+        #expect(answer == .string(Data([3, 2, 1]).base64EncodedString()))
+        do {
+            _ = try await object.call("reversed", arguments: [(nil, .string("no!"))])
+            Issue.record("text that isn't base64 was taken as data")
+        } catch let trap as Trap {
+            #expect(trap.message == "`bytes`: Encountered Data is not valid Base64.")
+        }
+    }
+
     /// The code of an object that takes other objects, at the top level and inside its values.
     static let teller = """
         actor Wallet {}

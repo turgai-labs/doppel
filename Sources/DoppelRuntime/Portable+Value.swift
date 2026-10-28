@@ -80,7 +80,8 @@ extension Evaluator {
                         })
                 )
             ])
-        case (.date, _), (.decimal, _), (.uuid, _), (.url, _): return Self.foundationPortable(value) ?? .null
+        case (.date, _), (.decimal, _), (.uuid, _), (.url, _), (.data, _):
+            return Self.foundationPortable(value) ?? .null
         case (.actor, _): return .reference(host.itself)
         case (.object(let handle), _): return .reference(handle)
         case (.duration(let duration), _):

@@ -46,6 +46,7 @@ package indirect enum Value {
     case decimal(Decimal)
     case uuid(UUID)
     case url(URL)
+    case data(Data)
 }
 
 /// Another object: what the host knows it by, and the actor type it is when that's known.

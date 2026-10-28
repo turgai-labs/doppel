@@ -10,7 +10,7 @@ import Doppel
 /// Foundation: what code reads of them is what Swift's gives.
 extension Evaluator {
     /// The types it runs.
-    static let foundationTypes: Set<String> = ["Date", "Decimal", "UUID", "URL"]
+    static let foundationTypes: Set<String> = ["Date", "Decimal", "UUID", "URL", "Data", "String.Encoding"]
 
     /// A static member of one of its types: `Date.now`.
     func foundationStatic(_ type: String, _ name: String) throws -> Value {
@@ -19,6 +19,7 @@ extension Evaluator {
         case ("Date", "distantPast"): return .date(.distantPast)
         case ("Date", "distantFuture"): return .date(.distantFuture)
         case ("Decimal", "zero"): return .decimal(.zero)
+        case ("String.Encoding", "utf8"): return Self.encoding(.utf8)
         default: throw Trap(message: "'\(type).\(name)' isn't run by Doppel yet")
         }
     }
@@ -43,6 +44,11 @@ extension Evaluator {
         case ("UUID", "init()", nil): return .uuid(UUID())
         case ("UUID", "init(uuidString:)", .string(let text)?): return .optional(UUID(uuidString: text).map(Value.uuid))
         case ("URL", "init(string:)", .string(let text)?): return .optional(URL(string: text).map(Value.url))
+        case ("Data", "init()", nil): return .data(Data())
+        case ("Data", "init(_:)", .data(let bytes)?): return .data(Data(bytes))
+        case ("Data", "init(_:)", let source?): return .data(Data(try elements(of: source).map(Self.byte)))
+        case ("Data", "init(base64Encoded:)", .string(let text)?):
+            return .optional(Data(base64Encoded: text).map(Value.data))
         default: break
         }
         throw Trap(message: "'\(type).\(name)' isn't run by Doppel yet")
@@ -76,6 +82,30 @@ extension Evaluator {
             case "scheme": return .optional(url.scheme.map(Value.string))
             default: return nil
             }
+        case .data(let bytes):
+            switch (name, arguments.first) {
+            case ("count", nil): return .int(bytes.count)
+            case ("isEmpty", nil): return .bool(bytes.isEmpty)
+            // Its own positions, as Foundation's: a slice's start where it was in what it's of.
+            case ("startIndex", nil): return .int(bytes.startIndex)
+            case ("endIndex", nil): return .int(bytes.endIndex)
+            case ("index(after:)", .int(let index)?): return .int(bytes.index(after: index))
+            case ("index(before:)", .int(let index)?): return .int(bytes.index(before: index))
+            case ("subscript(_:)", .int(let index)?):
+                guard bytes.indices.contains(index) else { throw Trap(message: "Index out of range") }
+                return Self.byte(bytes[index])
+            case ("subscript(_:)", .array(let positions)?):
+                // The positions of a range, read as the array of them: the bytes there.
+                let indices = try positions.map(int)
+                guard let first = indices.first else { return .data(Data()) }
+                guard indices.allSatisfy(bytes.indices.contains) else {
+                    throw Trap(message: "Data index is out of range")
+                }
+                return .data(bytes[first..<first + indices.count])
+            case ("base64EncodedString()", nil): return .string(bytes.base64EncodedString())
+            case ("description", nil): return .string(bytes.description)
+            default: return nil
+            }
         default:
             return nil
         }
@@ -100,6 +130,7 @@ extension Evaluator {
         case (.decimal(let a), .decimal(let b)): a == b
         case (.uuid(let a), .uuid(let b)): a == b
         case (.url(let a), .url(let b)): a == b
+        case (.data(let a), .data(let b)): a == b
         default: nil
         }
     }
@@ -119,14 +150,63 @@ extension Evaluator {
         case .decimal(let decimal): decimal.description
         case .uuid(let uuid): uuid.uuidString
         case .url(let url): url.absoluteString
+        case .data(let bytes): bytes.description
         default: nil
         }
+    }
+
+    /// Foundation's own members of `String`: text read from data, and written as data.
+    func foundationString(_ name: String, _ text: Value?, _ arguments: [Value]) throws -> Value {
+        switch (name, text, arguments.first) {
+        case ("init(data:encoding:)", nil, .data(let bytes)?):
+            return .optional(String(data: bytes, encoding: try Self.encoding(arguments[1])).map(Value.string))
+        case ("data(using:allowLossyConversion:)", .string(let text)?, let encoding?):
+            guard case .bool(let lossy) = arguments[1] else { throw Trap(message: "not a Bool") }
+            return .optional(text.data(using: try Self.encoding(encoding), allowLossyConversion: lossy).map(Value.data))
+        default: throw Trap(message: "'String.\(name)' isn't run by Doppel yet")
+        }
+    }
+
+    /// A string encoding, as its raw value.
+    static func encoding(_ encoding: String.Encoding) -> Value {
+        .structure("String.Encoding", [.fixed(.uint, UInt64(encoding.rawValue))])
+    }
+
+    static func encoding(_ value: Value) throws -> String.Encoding {
+        guard case .structure("String.Encoding", let fields) = value, case .fixed(.uint, let raw)? = fields.first else {
+            throw Trap(message: "not a String.Encoding")
+        }
+        return String.Encoding(rawValue: UInt(raw))
+    }
+
+    /// Data with a byte, or other data, appended.
+    static func appending(_ appended: Value, to bytes: Data) throws -> Value {
+        var bytes = bytes
+        if case .data(let other) = appended { bytes.append(other) } else { bytes.append(try byte(appended)) }
+        return .data(bytes)
+    }
+
+    /// Data with the byte at a position set.
+    static func setting(_ index: Int, of bytes: Data, to value: Value) throws -> Value {
+        guard bytes.indices.contains(index) else { throw Trap(message: "Index out of range") }
+        var bytes = bytes
+        bytes[index] = try byte(value)
+        return .data(bytes)
+    }
+
+    /// A byte, as `UInt8`.
+    static func byte(_ byte: UInt8) -> Value { .fixed(.uint8, UInt64(byte)) }
+
+    static func byte(_ value: Value) throws -> UInt8 {
+        guard case .fixed(.uint8, let bits) = value else { throw Trap(message: "not a UInt8") }
+        return UInt8(bits)
     }
 
     // MARK: Crossing
 
     /// One of its values as it crosses, as the actors that send it write it: a date as ISO 8601
-    /// with this device's offset, a decimal as a number, a UUID and a URL as text.
+    /// with this device's offset, a decimal as a number, a UUID and a URL as text, data as
+    /// base64 text, as `JSONEncoder` writes it.
     static func foundationPortable(_ value: Value) -> Portable? {
         switch value {
         case .date(let date):
@@ -138,6 +218,7 @@ extension Evaluator {
         case .decimal(let decimal): return .double(Double(decimal.description) ?? 0)
         case .uuid(let uuid): return .string(uuid.uuidString)
         case .url(let url): return .string(url.absoluteString)
+        case .data(let bytes): return .string(bytes.base64EncodedString())
         default: return nil
         }
     }
@@ -163,6 +244,11 @@ extension Evaluator {
         case ("URL", .string(let text)):
             guard let url = URL(string: text) else { throw Trap(message: "\"\(text)\" isn't a 'URL'") }
             return .url(url)
+        case ("Data", .string(let text)):
+            guard let bytes = Data(base64Encoded: text) else {
+                throw Trap(message: "Encountered Data is not valid Base64.")
+            }
+            return .data(bytes)
         case (_, _) where foundationTypes.contains(type):
             throw Trap(message: "\(portable) isn't a '\(type)'")
         default:

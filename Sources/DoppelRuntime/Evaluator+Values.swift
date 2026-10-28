@@ -222,7 +222,7 @@ extension Evaluator {
         case .stream: return "AsyncStream"
         case .continuation: return "AsyncStream.Continuation"
         case .streamIterator: return "AsyncStream.Iterator"
-        case .date, .decimal, .uuid, .url: return Self.foundationDescription(value) ?? ""
+        case .date, .decimal, .uuid, .url, .data: return Self.foundationDescription(value) ?? ""
         }
     }
 

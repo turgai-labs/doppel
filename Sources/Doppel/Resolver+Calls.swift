@@ -572,6 +572,18 @@ extension Resolver {
         where !parameter.contains(".") && bindings[parameter] == nil && !type.substituting(bindings).isOpen {
             bindings[parameter] = type.substituting(bindings)
         }
+        // An array literal given for a sequence whose elements a `where` fixes is an array of
+        // them, as Swift types it: `Data([104, 105])` is given a `[UInt8]`.
+        for (parameter, match) in zip(function.parameters, matches) {
+            guard case .given(let index) = match, case .parameter(let name) = parameter.type, bindings[name] == nil,
+                arguments.values[index].expression.is(ArrayExprSyntax.self),
+                let element = function.requirements.lazy.compactMap({ requirement -> SwiftType? in
+                    guard case .same("\(name).Element", let type) = requirement else { return nil }
+                    return type.substituting(bindings)
+                }).first, !element.isOpen
+            else { continue }
+            bindings[name] = .array(element)
+        }
         // An expected existential says nothing of a generic result: it takes whatever's inferred.
         if let expected, function.result.substituting(bindings).isOpen, !Self.saysNothing(expected) {
             function.result.substituting(bindings).bind(to: expected, into: &bindings)

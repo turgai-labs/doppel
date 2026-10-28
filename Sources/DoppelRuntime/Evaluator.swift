@@ -241,12 +241,13 @@ package final class Evaluator {
     }
 
     /// A sequence's elements, in order: an array's, a set's, a string's characters, a
-    /// dictionary's pairs.
+    /// dictionary's pairs, data's bytes.
     func elements(of sequence: Value) throws -> [Value] {
         switch sequence {
         case .array(let elements), .set(let elements): return elements
         case .string(let text): return text.map(Value.character)
         case .dictionary(let pairs): return pairs.map { .tuple([$0.key, $0.value]) }
+        case .data(let bytes): return bytes.map(Self.byte)
         default: throw Trap(message: "a for-in loop's sequence isn't one")
         }
     }

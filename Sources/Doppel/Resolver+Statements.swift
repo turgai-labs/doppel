@@ -580,8 +580,14 @@ extension Resolver {
         case .dictionary(let key, let value): element = .tuple([key, value], labels: ["key", "value"])
         case .dynamic, .unresolved: element = sequence.type
         default:
-            report("for-in loop requires '\(sequence.type)' to conform to 'Sequence'", at: forStmt.sequence)
-            return nil
+            // A library's own sequence: of the elements it names, `UInt8` for `Data`.
+            guard let name = sequence.type.declarationName, module.type(named: name)?.kind == .standard,
+                conforms(sequence.type, to: "Sequence"), let named = typeBindings(of: sequence.type)["Element"]
+            else {
+                report("for-in loop requires '\(sequence.type)' to conform to 'Sequence'", at: forStmt.sequence)
+                return nil
+            }
+            element = named
         }
         let before = context.unassigned
         defer { context.unassigned = before }

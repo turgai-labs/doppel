@@ -14,10 +14,13 @@ extension Evaluator {
         case (_, .stream(let box)?) where name == "makeAsyncIterator()": return .streamIterator(StreamIterator(box))
         case (_, .continuation(let box)?): return try await continuation(member, name, box, arguments)
         case ("Duration", nil) where !name.hasPrefix("init("): return try durationStatic(name, arguments)
+        case ("String", nil) where name == "init(data:encoding:)",
+            (_, .string?) where name == "data(using:allowLossyConversion:)":
+            return try foundationString(name, base, arguments)
         case (let type, nil) where Self.foundationTypes.contains(type):
             return name.hasPrefix("init(")
                 ? try foundationInitializer(type, name, arguments) : try foundationStatic(type, name)
-        case (_, .date?), (_, .decimal?), (_, .uuid?), (_, .url?):
+        case (_, .date?), (_, .decimal?), (_, .uuid?), (_, .url?), (_, .data?):
             if let result = try foundationMember(name, of: base!, arguments) { return result }
         case (_, nil): return try await initializer(member.type, name, arguments)
         case (_, .array(let elements)?): return try await array(name, elements, arguments)
@@ -189,6 +192,10 @@ extension Evaluator {
             default: throw Trap(message: "'Set.\(member.member)' isn't run by Doppel yet")
             }
             return .void
+        case .data(let bytes):
+            guard member.member == "append(_:)" else { break }
+            value = try Self.appending(arguments[0], to: bytes)
+            return .void
         case .bool(let flag):
             guard member.member == "toggle()" else { break }
             value = .bool(!flag)
@@ -207,6 +214,8 @@ extension Evaluator {
             guard elements.indices.contains(index) else { throw Trap(message: "Index out of range") }
             elements[index] = value
             container = .array(elements)
+        case .data(let bytes):
+            container = try Self.setting(try int(keys[0]), of: bytes, to: value)
         case .dictionary(var pairs):
             let existing = try pairs.firstIndex { try Self.equal($0.key, keys[0]) }
             var new: Value? = value
@@ -329,6 +338,7 @@ extension Evaluator {
         case ("Set", "init(_:)", let source?): return .set(try Self.unique(try elements(of: source)))
         case ("Array", "init(_:)", .set(let elements)?): return .array(elements)
         case ("Array", "init(_:)", .string(let text)?): return .array(text.map(Value.character))
+        case ("Array", "init(_:)", .data(let bytes)?): return .array(bytes.map(Self.byte))
         case ("Array", "init(repeating:count:)", let element?):
             let count = try int(arguments[1])
             guard count >= 0 else { throw Trap(message: "Can't construct Array with count < 0") }

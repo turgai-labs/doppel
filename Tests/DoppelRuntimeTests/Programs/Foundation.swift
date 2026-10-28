@@ -33,5 +33,24 @@ actor Program {
 
         let payment = Payment(amount: total, at: start, id: id)
         print(payment.amount, payment.at)
+
+        let bytes = Data([104, 105, 33])
+        print(bytes, bytes.count, bytes.isEmpty, Data().isEmpty, [bytes])
+        print(bytes.base64EncodedString(), Data(base64Encoded: "aGkh") == bytes, Data(base64Encoded: "no!") == nil)
+        print(String(data: bytes, encoding: .utf8) ?? "none", "héllo".data(using: .utf8)?.count ?? 0)
+        var grown = Data("ab".utf8)
+        grown.append(99)
+        grown.append(bytes)
+        grown[0] = 65
+        print(Array(grown), grown.first ?? 0, grown.last ?? 0)
+        let middle = grown[2..<4]
+        print(middle.startIndex, middle.endIndex, middle[2], Array(middle))
+        print(grown.map { Int($0) }.reduce(0) { $0 + $1 }, grown.contains(104))
+        for byte in bytes.prefix(2) {
+            print(byte)
+        }
+        grown.append(contentsOf: [1, 2])
+        print(grown.count, grown.dropFirst(3).count, grown.filter { $0 > 100 }.count)
+        print(Set([bytes, Data([104, 105, 33])]).count)
     }
 }
