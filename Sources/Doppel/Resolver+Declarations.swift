@@ -278,9 +278,11 @@ extension Resolver {
                     effects: isGetter ? property.effects : .none,
                     result: isGetter ? result : .void, parent: nil)
                 if !isGetter {
+                    // What it's given, named as it names it, or as Swift does: a setter's and
+                    // `willSet`'s new value, `didSet`'s old one.
                     let parameter =
                         accessor.parameters?.name.text
-                        ?? (accessor.accessorSpecifier.text == "willSet" ? "newValue" : "oldValue")
+                        ?? (accessor.accessorSpecifier.text == "didSet" ? "oldValue" : "newValue")
                     _ = context.declare(parameter, type: result, mutable: false)
                 }
                 resolveBody(body.statements, context: context, at: accessor)
