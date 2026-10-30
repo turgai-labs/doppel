@@ -20,6 +20,22 @@ final class Module {
         let file: String
     }
 
+    /// The macros it declares, by name: the roles each is attached with, and how many parameters
+    /// it takes.
+    private(set) var macros: [String: Macro] = [:]
+
+    /// A macro an attribute can name: `@attached(accessor) macro Subscribed()`.
+    struct Macro {
+        /// The roles it's attached with, as written: `accessor`, `extension`. None when it's only
+        /// freestanding, so no attribute names it.
+        let roles: [String]
+        let parameters: Int
+    }
+
+    /// The types an attribute can name, besides macros: property wrappers, result builders and
+    /// global actors.
+    private(set) var attributeTypes: Set<String> = []
+
     /// A type declared twice: the declaration that came second, which isn't used.
     private(set) var redeclared: [(node: Syntax, name: String)] = []
 
@@ -57,6 +73,40 @@ final class Module {
         }
         for type in types.values where type.kind == .enumeration && type.cases.allSatisfy(\.values.isEmpty) {
             type.conformances.formUnion(["Equatable", "Hashable"])
+        }
+        for (_, syntax) in all {
+            for statement in syntax.statements { declareAttribute(statement.item) }
+        }
+    }
+
+    /// Declares what `item` lets an attribute name: a macro, or a type that's a property wrapper,
+    /// a result builder or a global actor.
+    private func declareAttribute(_ item: CodeBlockItemSyntax.Item) {
+        if let macro = item.as(MacroDeclSyntax.self) {
+            let roles = macro.attributes.compactMap { element -> String? in
+                guard let attribute = element.as(AttributeSyntax.self),
+                    attribute.attributeName.trimmedDescription == "attached",
+                    case .argumentList(let arguments)? = attribute.arguments
+                else { return nil }
+                return arguments.first?.expression.trimmedDescription
+            }
+            macros[macro.name.text] = Macro(
+                roles: roles, parameters: macro.signature.parameterClause.parameters.count)
+            return
+        }
+        let declared: (name: String, attributes: AttributeListSyntax)? =
+            if let decl = item.as(StructDeclSyntax.self) {
+                (decl.name.text, decl.attributes)
+            } else if let decl = item.as(ClassDeclSyntax.self) {
+                (decl.name.text, decl.attributes)
+            } else if let decl = item.as(EnumDeclSyntax.self) {
+                (decl.name.text, decl.attributes)
+            } else if let decl = item.as(ActorDeclSyntax.self) { (decl.name.text, decl.attributes) } else { nil }
+        guard let declared else { return }
+        let marks = Set(
+            declared.attributes.compactMap { $0.as(AttributeSyntax.self)?.attributeName.trimmedDescription })
+        if !marks.isDisjoint(with: ["propertyWrapper", "resultBuilder", "globalActor"]) {
+            attributeTypes.insert(declared.name)
         }
     }
 

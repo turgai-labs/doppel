@@ -16,6 +16,7 @@ extension Resolver {
         for redeclared in module.redeclared {
             report("invalid redeclaration of '\(redeclared.name)'", at: redeclared.node)
         }
+        checkAttributes()
         for statement in checked.statements {
             let item = statement.item
             if let type = module.declares(item), type.kind != .protocol {
