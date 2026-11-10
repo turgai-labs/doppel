@@ -1,4 +1,4 @@
-import SwiftSyntax
+public import SwiftSyntax
 
 extension Resolver {
     /// Each attribute of the checked file's declarations, as Swift checks it: a declaration
@@ -73,7 +73,7 @@ extension Resolver {
     private static func described(_ declaration: DeclSyntax) -> String {
         let inType = declaration.parent?.is(MemberBlockItemSyntax.self) == true
         let isStatic =
-            declaration.asProtocol(WithModifiersSyntax.self)?.modifiers.contains {
+            declaration.asProtocol((any WithModifiersSyntax).self)?.modifiers.contains {
                 [.keyword(.static), .keyword(.class)].contains($0.name.tokenKind)
             } == true
         if let function = declaration.as(FunctionDeclSyntax.self) {

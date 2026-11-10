@@ -1,4 +1,4 @@
-import Doppel
+public import Doppel
 
 /// A file's actor, live: made from its code, given messages, its state read and set. Everything
 /// the files it's given declare is the host's. It runs on whoever owns it, one message at a time,

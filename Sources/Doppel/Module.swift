@@ -1,5 +1,5 @@
 import SwiftParser
-import SwiftSyntax
+public import SwiftSyntax
 
 /// What a module declares, across its files and the standard library: its types with their
 /// members, its typealiases, and its global functions and constants.

@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 
 /// The Swift compiler's own verdict on code: what `swiftc` says about a module's files as it compiles them,
 /// at their lines. For tests on a machine with a Swift toolchain, to hold another checker to what

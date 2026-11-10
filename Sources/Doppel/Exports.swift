@@ -1,4 +1,4 @@
-import SwiftSyntax
+package import SwiftSyntax
 
 /// What the runtime reads of a type's declaration.
 extension TypeDeclaration {

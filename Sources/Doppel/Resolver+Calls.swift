@@ -1,5 +1,5 @@
 import SwiftParser
-import SwiftSyntax
+public import SwiftSyntax
 
 /// A call's arguments as written: in parentheses, then its trailing closures.
 struct CallArguments: Equatable {
@@ -615,13 +615,13 @@ extension Resolver {
             case .given(let index):
                 let argument = arguments.values[index].expression
                 if parameter.isInout {
-                    guard let inout_ = argument.as(InOutExprSyntax.self) else {
+                    guard let inOut = argument.as(InOutExprSyntax.self) else {
                         report(
                             "passing value of type '\(parameter.type)' to an inout parameter requires explicit '&'",
                             at: argument)
                         return nil
                     }
-                    guard let (place, _) = place(inout_.expression, mutating: nil) else { return nil }
+                    guard let (place, _) = place(inOut.expression, mutating: nil) else { return nil }
                     resolved.append(.reference(place))
                     continue
                 }

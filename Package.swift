@@ -49,7 +49,8 @@ let package = Package(
 //   interpreter runs on the actor that owns it, one call at a time, interleaving only where a
 //   script waits;
 // - a conformance is isolated as the type it's on is;
-// - a module sees only the members of the modules it imports;
+// - a module sees only the members of the modules it imports, and imports for itself unless it
+//   says `public import`;
 // - an existential is written `any`;
 // - a weak capture can't be reassigned.
 for target in package.targets {
@@ -58,6 +59,7 @@ for target in package.targets {
             .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
             .enableUpcomingFeature("InferIsolatedConformances"),
             .enableUpcomingFeature("MemberImportVisibility"),
+            .enableUpcomingFeature("InternalImportsByDefault"),
             .enableUpcomingFeature("ExistentialAny"),
             .enableUpcomingFeature("ImmutableWeakCaptures"),
         ]

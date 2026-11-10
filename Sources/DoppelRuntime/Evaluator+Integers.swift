@@ -1,4 +1,4 @@
-import Doppel
+public import Doppel
 
 // Integers as Swift's own types run them: each operation is done by the type the value is of, on
 // its bits, so what overflows traps and what wraps wraps, as in Swift.

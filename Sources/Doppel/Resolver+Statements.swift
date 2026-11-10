@@ -67,10 +67,10 @@ extension Resolver {
                     // A constant of `()` is Swift, with a warning; it's kept as it is.
                 }
             }
-            switch binding.pattern.as(PatternSyntax.self) {
-            case let pattern? where pattern.is(WildcardPatternSyntax.self):
+            switch binding.pattern {
+            case let pattern where pattern.is(WildcardPatternSyntax.self):
                 if let value { resolved.append(.expression(value)) }
-            case let pattern? where pattern.is(IdentifierPatternSyntax.self):
+            case let pattern where pattern.is(IdentifierPatternSyntax.self):
                 let name = pattern.as(IdentifierPatternSyntax.self)!.identifier.text
                 guard let type = value?.type ?? annotation else {
                     report("type annotation missing in pattern", at: pattern)
@@ -85,7 +85,7 @@ extension Resolver {
                     context.unassigned.insert(Local(depth: context.frame.depth, slot: slot))
                     resolved.append(.declare(slot, nil))
                 }
-            case let pattern? where pattern.is(TuplePatternSyntax.self):
+            case let pattern where pattern.is(TuplePatternSyntax.self):
                 guard let value, case .tuple(let elements, _) = value.type,
                     let tuple = pattern.as(TuplePatternSyntax.self), tuple.elements.count == elements.count
                 else {

@@ -2,7 +2,7 @@ import SwiftDiagnostics
 import SwiftOperators
 import SwiftParser
 import SwiftParserDiagnostics
-import SwiftSyntax
+package import SwiftSyntax
 
 /// What Swift says of a file of a module, decided as Swift decides it: its syntax, then every name
 /// and type in it, resolved. Only the file is checked; the module's other files are what it's

@@ -12,7 +12,8 @@ struct RuntimeTests {
         "a program prints what Swift's build of it prints",
         arguments: [
             "Values", "Collections", "Flow", "Characters", "Protocols", "Integers", "Strings", "Functional",
-            "Foundation", "Nesting", "Optionals", "Results", "EnumSelf", "NilLiterals", "AsyncSequences", "NestedGenerics", "Metatypes", "Streams",
+            "Foundation", "Nesting", "Optionals", "Results", "EnumSelf", "NilLiterals", "AsyncSequences",
+            "NestedGenerics", "Metatypes", "Streams",
         ])
     func printsAsSwiftDoes(_ name: String) async throws {
         let code = try String(contentsOf: Self.programs.appendingPathComponent("\(name).swift"), encoding: .utf8)
@@ -293,7 +294,9 @@ struct ObjectRunTests {
         let host = RecordingHost()
         let object = try await LiveActor(
             type: "Digest", in: "Object.swift",
-            of: [SwiftCheck.File(name: "Tools.swift", code: tools), SwiftCheck.File(name: "Object.swift", code: digest)],
+            of: [
+                SwiftCheck.File(name: "Tools.swift", code: tools), SwiftCheck.File(name: "Object.swift", code: digest),
+            ],
             module: "Objects", host: host)
         _ = try await object.call("run", arguments: [])
         #expect(host.sent.map(\.message) == ["Tools.Web.send", "Tools.Mail.send"])

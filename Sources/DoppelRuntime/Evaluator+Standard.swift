@@ -129,7 +129,7 @@ extension Evaluator {
             case "removeAll()": elements.removeAll()
             case "removeAll(where:)":
                 var kept: [Value] = []
-                for element in elements where try await !truth(of: try await apply(arguments[0], element)) {
+                for element in elements where try await !truth(of: apply(arguments[0], element)) {
                     kept.append(element)
                 }
                 elements = kept
@@ -474,7 +474,7 @@ extension Evaluator {
             return .dictionary(mapped)
         case "filter(_:)":
             var kept: [(key: Value, value: Value)] = []
-            for pair in pairs where try await truth(of: try await apply(arguments[0], .tuple([pair.key, pair.value]))) {
+            for pair in pairs where try await truth(of: apply(arguments[0], .tuple([pair.key, pair.value]))) {
                 kept.append(pair)
             }
             return .dictionary(kept)

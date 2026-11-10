@@ -1,10 +1,10 @@
-import Doppel
+public import Doppel
 import Synchronization
 
 #if canImport(FoundationEssentials)
-    import FoundationEssentials
+    public import FoundationEssentials
 #else
-    import Foundation
+    public import Foundation
 #endif
 
 /// A value, as the code running holds it: Swift's own kinds, its structs and enums, its actor, and

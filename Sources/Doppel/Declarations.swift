@@ -1,4 +1,4 @@
-import SwiftSyntax
+public import SwiftSyntax
 
 /// A type a module declares: a struct, enum, actor or protocol, or one of the standard library's,
 /// with its members, as its declaration and its extensions give them.
