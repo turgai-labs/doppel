@@ -888,7 +888,7 @@ extension Resolver {
         case (let binary, .fixedInteger(let kind), .fixedInteger(let other))
         where kind == other || binary == "<<" || binary == ">>":
             return .compound(place, binary, operand)
-        case ("<<", .int, let amount),
+        case ("<<", .int, let amount) where amount.isInteger,
             (">>", .int, let amount) where amount.isInteger:
             return .compound(place, binary, operand)
         default:
