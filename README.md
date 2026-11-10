@@ -1,5 +1,7 @@
 # Doppel
 
+<picture><source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.png"><img alt="Doppel, a double of Swift: a pixel swift with its double behind it" src="assets/banner-light.png"></picture>
+
 A doppelgänger of Swift: Doppel checks Swift code the way the compiler would and runs one actor from it live, without
 compiling, with every other actor handled by the host app.
 
@@ -42,4 +44,5 @@ Swift 6.4, macOS 15 or iOS 18.
 Doppel began as a fork of [SwiftScript](https://github.com/Cocoanetics/SwiftScript) by Oliver
 Drobnik, a Swift interpreter written in Swift. It has since been rewritten as a checker and an
 actor runtime, and none of SwiftScript's source remains, but the idea and the start are his.
-Both are under the MIT License; see [LICENSE](LICENSE).
+Both are under the MIT License; see [LICENSE](LICENSE). The swift in `assets/` is drawn for Doppel; the banners'
+letters are from [Kenney](https://www.kenney.nl)'s [1-Bit Pack](https://kenney.nl/assets/1-bit-pack) (CC0).
