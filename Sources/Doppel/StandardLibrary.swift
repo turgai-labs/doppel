@@ -13,7 +13,9 @@ enum StandardLibrary {
         protocol Error: Sendable {}
         protocol Actor: Sendable {}
         protocol CustomStringConvertible {}
-        protocol Codable {}
+        protocol Encodable {}
+        protocol Decodable {}
+        protocol Codable: Encodable, Decodable {}
         protocol Identifiable {}
         protocol CaseIterable {}
         protocol BinaryInteger: Hashable, Comparable, CustomStringConvertible {}

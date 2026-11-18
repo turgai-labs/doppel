@@ -138,7 +138,7 @@ struct DeclarationsTests {
             Issue.record("no structs: \(String(describing: declarations))")
             return
         }
-        #expect(report == ["Codable"])
+        #expect(report == ["Codable", "Decodable", "Encodable"])
         #expect(note == ["Named", "Titled"])
     }
 

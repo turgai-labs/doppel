@@ -74,6 +74,24 @@ enum FoundationLibrary {
             var description: String { get }
         }
 
+        struct JSONDecoder {
+            init()
+            func decode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T
+        }
+
+        struct JSONEncoder {
+            init()
+            func encode<T: Encodable>(_ value: T) throws -> Data
+        }
+
+        enum DecodingError: Error {
+            struct Context: Sendable {
+                let debugDescription: String
+            }
+
+            case dataCorrupted(Context)
+        }
+
         extension Data: RandomAccessCollection, MutableCollection, RangeReplaceableCollection {
             typealias Element = UInt8
             typealias Index = Int

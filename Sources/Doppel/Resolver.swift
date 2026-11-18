@@ -276,6 +276,14 @@ final class Resolver {
             case .int, .double, .string, .character, .fixedInteger: return true
             default: break
             }
+        case "Encodable", "Decodable", "Codable":
+            // As Swift conforms them: an optional, an array or a dictionary is, when what it holds is.
+            switch type {
+            case .optional(let wrapped), .array(let wrapped): return conforms(wrapped, to: protocolName)
+            case .dictionary(let key, let value):
+                return conforms(key, to: protocolName) && conforms(value, to: protocolName)
+            default: break
+            }
         default: break
         }
         switch type {

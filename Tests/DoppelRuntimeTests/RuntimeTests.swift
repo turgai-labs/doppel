@@ -13,7 +13,7 @@ struct RuntimeTests {
         arguments: [
             "Values", "Collections", "Flow", "Characters", "Protocols", "Integers", "Strings", "Functional",
             "Foundation", "Nesting", "Optionals", "Results", "EnumSelf", "NilLiterals", "AsyncSequences",
-            "NestedGenerics", "Metatypes", "Streams",
+            "NestedGenerics", "Metatypes", "Streams", "JSON",
         ])
     func printsAsSwiftDoes(_ name: String) async throws {
         let code = try String(contentsOf: Self.programs.appendingPathComponent("\(name).swift"), encoding: .utf8)
@@ -367,6 +367,45 @@ struct ObjectRunTests {
 
     /// A dictionary crosses as `Codable` writes it: keyed by `Int`, an object whose keys are the
     /// digits; keyed by anything else but `String`, its keys and values in turn.
+    /// JSON that doesn't fit its type is thrown as an error the code can catch, saying where it
+    /// doesn't fit; JSON that isn't JSON is thrown the same way.
+    @Test func aDecodeThatDoesntFitSaysWhere() async throws {
+        let code = #"""
+            import Foundation
+
+            struct Forecast: Decodable {
+                struct Daily: Decodable {
+                    var temperature_2m_max: [Double]
+                }
+                var daily: Daily
+            }
+
+            actor Weather {
+                func highs(_ json: String) -> String {
+                    do {
+                        let forecast = try JSONDecoder().decode(Forecast.self, from: Data(json.utf8))
+                        return "\(forecast.daily.temperature_2m_max)"
+                    } catch {
+                        return "\(error)"
+                    }
+                }
+            }
+            """#
+        let object = try await LiveActor(
+            type: "Weather", in: "Weather.swift", of: [.init(name: "Weather.swift", code: code)], module: "weather",
+            host: RecordingHost())
+        let fits = try await object.call(
+            "highs", arguments: [(nil, .string(#"{"daily": {"temperature_2m_max": [1.5]}}"#))])
+        #expect(fits == .string("[1.5]"))
+        let wrong = try await object.call(
+            "highs", arguments: [(nil, .string(#"{"daily": {"temperature_2m_max": ["warm"]}}"#))])
+        guard case .string(let said) = wrong else { throw Trap(message: "not text") }
+        #expect(said.contains("daily.temperature_2m_max[0]"))
+        let notJSON = try await object.call("highs", arguments: [(nil, .string("not json"))])
+        guard case .string(let saidNotJSON) = notJSON else { throw Trap(message: "not text") }
+        #expect(saidNotJSON.contains("not valid JSON"))
+    }
+
     @Test func dictionariesCrossAsCodableWritesThem() async throws {
         let code = """
             actor Tally {

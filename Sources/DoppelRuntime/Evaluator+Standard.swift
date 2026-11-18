@@ -17,6 +17,9 @@ extension Evaluator {
         case ("String", nil) where name == "init(data:encoding:)",
             (_, .string?) where name == "data(using:allowLossyConversion:)":
             return try foundationString(name, base, arguments)
+        case (let type, nil) where Self.jsonCoders.contains(type) && name == "init()": return .structure(type, [])
+        case (_, .structure(let coder, _)?) where Self.jsonCoders.contains(coder):
+            return try json(coder, name, arguments)
         case (let type, nil) where Self.foundationTypes.contains(type):
             return name.hasPrefix("init(")
                 ? try foundationInitializer(type, name, arguments) : try foundationStatic(type, name)
