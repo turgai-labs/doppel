@@ -254,6 +254,19 @@ extension Resolver {
         return typed.map { StartingValue(value: $0, slots: context.frame.slots) }
     }
 
+    /// A parameter's default, resolved as a call that leaves it out resolves it: `nil` for one
+    /// that has none.
+    func defaultValue(of parameter: Parameter) -> StartingValue? {
+        guard let value = parameter.defaultValue else { return nil }
+        let context = FunctionContext(
+            kind: .global, name: "default", selfType: nil, effects: .none, result: nil, parent: nil)
+        let typed: Typed? = within(context) {
+            guard let typed = expression(value, expecting: parameter.type) else { return nil }
+            return converted(typed, to: parameter.type) ?? typed
+        }
+        return typed.map { StartingValue(value: $0, slots: context.frame.slots) }
+    }
+
     /// The starting value of a type's stored property, if it has one.
     func startingValue(of property: Property, in type: TypeDeclaration) -> StartingValue? {
         _ = propertyType(property, of: type)

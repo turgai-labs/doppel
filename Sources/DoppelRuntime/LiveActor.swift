@@ -62,8 +62,8 @@ public final class LiveActor {
     }
 
     /// Its method `name`, called with `arguments`, each matched to its parameter by label and read
-    /// as its type; its result as `Codable` writes it.
-    public func call(_ name: String, arguments: [(label: String?, value: Portable)]) async throws -> Portable {
+    /// as its type, or left out, `nil`, for its default; its result as `Codable` writes it.
+    public func call(_ name: String, arguments: [(label: String?, value: Portable?)]) async throws -> Portable {
         let candidates = declaration.method(name).filter { !$0.isStatic && !$0.isPrivate }
         guard
             let method = candidates.first(where: { $0.parameters.map(\.label) == arguments.map(\.label) })
@@ -76,7 +76,17 @@ public final class LiveActor {
         }
         var values: [Value] = []
         for (parameter, argument) in zip(method.parameters, arguments) {
-            values.append(try evaluator.value(argument.value, as: parameter.type, at: ValuePath(named: parameter.name)))
+            guard let given = argument.value else {
+                // Left out: its default, as Swift takes it for a call that leaves it out.
+                guard let value = evaluator.program.defaultValue(of: parameter) else {
+                    throw Trap(message: "`\(parameter.name)` has no default to leave it out for")
+                }
+                values.append(
+                    try await evaluator.evaluate(
+                        value.value, in: Frame(slots: value.slots, parent: nil, selfValue: nil)))
+                continue
+            }
+            values.append(try evaluator.value(given, as: parameter.type, at: ValuePath(named: parameter.name)))
         }
         let result = try await evaluator.run(
             evaluator.program.body(of: method), on: .actor(instance), arguments: values)

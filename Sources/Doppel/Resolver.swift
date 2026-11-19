@@ -325,6 +325,11 @@ package struct ResolvedProgram {
         resolver.startingValue(of: property, in: type)
     }
 
+    /// A parameter's default, as a call that leaves it out takes it: `nil` for one that has none.
+    package func defaultValue(of parameter: Parameter) -> StartingValue? {
+        resolver.defaultValue(of: parameter)
+    }
+
     /// Whether a declaration is the file's own, which runs here, rather than the host's.
     package func isOwn(_ syntax: Syntax?) -> Bool { syntax?.root.id == resolver.checked.root.id }
 

@@ -178,6 +178,29 @@ struct ObjectRunTests {
         }
     }
 
+    /// A call from outside may leave out what has a default, as Swift's may: the default is what
+    /// the method gets. What has none can't be left out.
+    @Test func aCallLeavesOutWhatHasADefault() async throws {
+        let code = """
+            actor Forecaster {
+                func forecast(place: String, days: Int = 3, country: String? = nil, units: String?) -> String {
+                    "\\(place) \\(days) \\(country ?? "-") \\(units ?? "-")"
+                }
+            }
+            """
+        let object = try await LiveActor(
+            type: "Forecaster", in: "Forecaster.swift", of: [.init(name: "Forecaster.swift", code: code)],
+            module: "forecaster", host: RecordingHost())
+        let answer = try await object.call(
+            "forecast",
+            arguments: [("place", .string("Vienna")), ("days", nil), ("country", nil), ("units", .null)])
+        #expect(answer == .string("Vienna 3 - -"))
+        await #expect(throws: Trap.self) {
+            try await object.call(
+                "forecast", arguments: [("place", nil), ("days", nil), ("country", nil), ("units", .null)])
+        }
+    }
+
     /// The code of an object that takes other objects, at the top level and inside its values.
     static let teller = """
         actor Wallet {}
