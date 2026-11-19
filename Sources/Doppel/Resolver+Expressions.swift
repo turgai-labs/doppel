@@ -144,14 +144,19 @@ extension Resolver {
 
     // MARK: Literals
 
-    /// A string literal: a `Character` where one is expected and it's one character, as Swift
+    /// A string literal: a `Character` or a `Unicode.Scalar` where one is expected and it's one, as Swift
     /// reads a literal by the type it's given.
     private func string(_ literal: StringLiteralExprSyntax, expecting expected: SwiftType?) -> Typed? {
         var pieces: [Piece] = []
         for segment in literal.segments {
             switch segment {
             case .stringSegment(let text):
-                pieces.append(.text(Self.unescaped(text.content.text)))
+                // Text next to text is one piece, however the literal's segments split it.
+                if case .text(let before)? = pieces.last {
+                    pieces[pieces.count - 1] = .text(before + Self.unescaped(text.content.text))
+                } else {
+                    pieces.append(.text(Self.unescaped(text.content.text)))
+                }
             case .expressionSegment(let interpolation):
                 guard interpolation.expressions.count == 1, let only = interpolation.expressions.first,
                     only.label == nil
@@ -166,6 +171,11 @@ extension Resolver {
         if pieces.count <= 1, case .text(let text)? = pieces.first ?? .text("") {
             if expected?.unwrapped == .character, text.count == 1, let character = text.first {
                 return Typed(.character(character), .character)
+            }
+            if expected?.unwrapped == .named("Unicode.Scalar"), text.unicodeScalars.count == 1,
+                let scalar = text.unicodeScalars.first
+            {
+                return Typed(.scalar(scalar), .named("Unicode.Scalar"))
             }
             // A literal is a `Substring` where one is expected, as any type that takes text.
             if expected?.unwrapped == .named("Substring") { return Typed(.string(text), .named("Substring")) }
@@ -418,9 +428,13 @@ extension Resolver {
         -> Typed?
     {
         let propertyType = propertyType(property, of: type).substituting(typeBindings(of: base.type))
+        // A library type written in Swift, each initializer with its body, keeps what it stores as
+        // any struct does.
+        let storedAsWritten =
+            property.isStored && !type.initializers.isEmpty && type.initializers.allSatisfy(Self.hasBody)
         // The standard library's own, which the interpreter reads; or one written in Swift, for
         // the value it's read of.
-        if let getter = property.getter, isStandard(getter) || type.kind == .protocol {
+        if let getter = property.getter, !storedAsWritten, isStandard(getter) || type.kind == .protocol {
             if property.effects.throwing { markThrows(at: node, property: true) }
             if property.effects.async { markAwait(at: node) }
             if isNative(getter) {
@@ -677,7 +691,8 @@ extension Resolver {
         }
         if let (property, declaring) = staticProperty(name, of: type), arguments == nil {
             let base = Typed(.global(typeName), .named(typeName))
-            if type.kind == .standard {
+            // Run natively, unless its Swift is written out.
+            if type.kind == .standard, !(property.getter.map(Self.hasBody) ?? false) {
                 let propertyType = propertyType(property, of: declaring).substituting(
                     typeBindings(of: type.declaredType))
                 return Typed(.standard(StandardMember(type: typeName, member: name), on: nil, []), propertyType)
@@ -700,7 +715,7 @@ extension Resolver {
                 at: node)
         else { return nil }
         markEffects(of: function, arguments: resolvedArguments, at: node)
-        if type.kind == .standard {
+        if type.kind == .standard, !Self.hasBody(function) {
             return Typed(
                 .standard(StandardMember(type: typeName, member: function.written), on: nil, resolvedArguments), result)
         }
@@ -769,7 +784,7 @@ extension Resolver {
                 Argument.value(Typed(.local(Local(depth: 0, slot: index)), given))
             }
             let made: Expression =
-                type.kind == .standard
+                type.kind == .standard && !Self.hasBody(candidate)
                 ? .standard(StandardMember(type: typeName, member: candidate.written), on: nil, arguments)
                 : .initialize(typeName, candidate.syntax == nil ? nil : resolvedBody(of: candidate), arguments)
             let closure = Closure(parameters: parameters.count)
@@ -925,15 +940,18 @@ extension Resolver {
             }
             return Typed(.binary(op, value, Typed(.nil, value.type)), .bool)
         }
-        // A literal takes the other side's type: `x + 1` for a `Double` `x`.
-        let leftIsLiteral = Self.isLiteral(left)
+        // A literal takes the other side's type: `x + 1` for a `Double` `x`; text, a `Character`'s,
+        // `" " == character`, and is a `String` otherwise.
+        let leftIsText = left.is(StringLiteralExprSyntax.self) && !right.is(StringLiteralExprSyntax.self)
         let lhs: Typed
         let rhs: Typed
-        if leftIsLiteral, !Self.isLiteral(right) {
+        if (Self.isLiteral(left) && !Self.isLiteral(right)) || leftIsText {
             guard
                 let resolvedRight = expression(
                     right, expecting: Self.arithmetic.contains(op) || Self.integerOnly.contains(op) ? expected : nil),
-                let resolvedLeft = expression(left, expecting: resolvedRight.type)
+                let resolvedLeft = expression(
+                    left,
+                    expecting: !leftIsText || resolvedRight.type.unwrapped == .character ? resolvedRight.type : nil)
             else { return nil }
             (lhs, rhs) = (resolvedLeft, resolvedRight)
         } else {

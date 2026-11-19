@@ -267,6 +267,7 @@ package final class Evaluator {
         case .double(let number): return .double(number)
         case .string(let text): return .string(text)
         case .character(let character): return .character(character)
+        case .scalar(let scalar): return Self.scalar(scalar)
         case .bool(let flag): return .bool(flag)
         case .nil: return .optional(nil)
         case .interpolation(let pieces):

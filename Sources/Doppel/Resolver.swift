@@ -332,6 +332,7 @@ package struct ResolvedProgram {
     /// Swift, rather than the host's.
     package func runsHere(_ syntax: Syntax?) -> Bool {
         isOwn(syntax) || syntax?.root.id == StandardLibrary.syntax.root.id
+            || syntax?.root.id == FoundationLibrary.syntax.root.id
     }
 
     /// A global's value, in whichever file declares it: what its initializer runs.

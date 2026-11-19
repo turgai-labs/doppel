@@ -65,6 +65,9 @@ package indirect enum Place {
     /// A stored property of `self`, or of a value that's itself a place.
     case stored(Place?, index: Int)
     case subscripted(Place, by: [Typed], getter: StandardMember)
+    /// A standard type's property that's settable, of a value that's itself a place: read with its
+    /// getter, and set by making the value anew from what it's set to.
+    case property(Place, getter: StandardMember)
     case optional(Place)
 }
 
@@ -112,6 +115,8 @@ package indirect enum Expression {
     case string(String)
     /// A string literal of one character, where a `Character` is expected.
     case character(Character)
+    /// A string literal of one Unicode scalar, where a `Unicode.Scalar` is expected.
+    case scalar(Unicode.Scalar)
     case bool(Bool)
     case `nil`
     case interpolation([Piece])

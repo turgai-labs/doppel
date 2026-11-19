@@ -19,6 +19,8 @@ extension Evaluator {
             var arguments: [Value] = []
             for key in keys { arguments.append(try await evaluate(key, in: frame)) }
             return try await standard(member, on: try await read(base, in: frame), arguments, as: .dynamic)
+        case .property(let base, let member):
+            return try await standard(member, on: try await read(base, in: frame), [], as: .dynamic)
         case .optional(let base):
             guard case .optional(let wrapped?) = try await read(base, in: frame) else {
                 throw Trap(message: "Unexpectedly found nil while unwrapping an Optional value")
@@ -56,6 +58,9 @@ extension Evaluator {
             var container = try await read(base, in: frame)
             try setSubscript(member, &container, arguments, to: value)
             try await write(base, container, in: frame)
+        case .property(let base, let member):
+            try await write(
+                base, try settingProperty(member, of: try await read(base, in: frame), to: value), in: frame)
         case .optional(let base):
             try await write(base, .optional(value), in: frame)
         }

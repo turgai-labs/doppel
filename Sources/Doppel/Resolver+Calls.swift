@@ -434,7 +434,7 @@ extension Resolver {
                 named: "init", at: node)
         else { return nil }
         markEffects(of: function, arguments: resolvedArguments, at: node)
-        if type.kind == .standard {
+        if type.kind == .standard, !Self.hasBody(function) {
             return Typed(
                 .standard(StandardMember(type: typeName, member: function.written), on: nil, resolvedArguments), result)
         }
@@ -956,6 +956,17 @@ extension Resolver {
             }
             // A stored property of a struct value that's itself a place.
             guard let (basePlace, baseType) = place(base, mutating: method == nil ? "" : method) else { return nil }
+            // A standard type's settable property, such as a string's `unicodeScalars`.
+            if let declarationName = baseType.declarationName,
+                let (property, type) = instanceProperty(name, of: baseType), !property.isStored, property.mutable,
+                let root = property.syntax?.root.id,
+                root == StandardLibrary.syntax.root.id || root == FoundationLibrary.syntax.root.id
+            {
+                return (
+                    .property(basePlace, getter: StandardMember(type: declarationName, member: name)),
+                    propertyType(property, of: type)
+                )
+            }
             guard case .named(let typeName, _) = baseType, let type = module.type(named: typeName),
                 type.kind == .structure,
                 let property = type.properties[name], let index = type.stored.firstIndex(where: { $0.name == name })

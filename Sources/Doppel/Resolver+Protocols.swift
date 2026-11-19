@@ -252,6 +252,10 @@ extension Resolver {
         context.selfValueType = type
         context.typeBindings = bindings
         context.fixedParameters = Set((owner?.generics ?? []) + function.generics)
+        // An initializer gives each stored property its value, as one in the file does.
+        if isInitializer, let owner {
+            context.unassignedStored = Set(owner.stored.filter { !$0.hasValue }.map(\.name))
+        }
         for parameter in function.parameters {
             _ = context.declare(parameter.name, type: parameter.type.substituting(bindings), mutable: parameter.isInout)
         }

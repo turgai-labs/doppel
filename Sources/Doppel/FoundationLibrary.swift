@@ -106,6 +106,69 @@ enum FoundationLibrary {
             init?(data: Data, encoding: String.Encoding)
             func data(using encoding: String.Encoding, allowLossyConversion: Bool = false) -> Data?
         }
+
+        /// Unicode scalars set apart, as Foundation's sets are: its scalar values, as ranges, each
+        /// from a lower bound to its upper one.
+        struct CharacterSet: Hashable, Sendable {
+            private let lowers: [UInt32]
+            private let uppers: [UInt32]
+
+            private init(lowers: [UInt32], uppers: [UInt32]) {
+                self.lowers = lowers
+                self.uppers = uppers
+            }
+
+            init(charactersIn string: String) {
+                let values = string.unicodeScalars.map { $0.value }
+                lowers = values
+                uppers = values
+            }
+
+            /// Unicode's spaces, general category Zs, and tab.
+            static var whitespaces: CharacterSet {
+                CharacterSet(
+                    lowers: [0x09, 0x20, 0xA0, 0x1680, 0x2000, 0x202F, 0x205F, 0x3000],
+                    uppers: [0x09, 0x20, 0xA0, 0x1680, 0x200A, 0x202F, 0x205F, 0x3000])
+            }
+
+            /// Line and paragraph ends: U+000A to U+000D, U+0085, U+2028 and U+2029.
+            static var newlines: CharacterSet {
+                CharacterSet(lowers: [0x0A, 0x85, 0x2028], uppers: [0x0D, 0x85, 0x2029])
+            }
+
+            static var whitespacesAndNewlines: CharacterSet { whitespaces.union(newlines) }
+
+            func contains(_ member: Unicode.Scalar) -> Bool {
+                for index in 0..<lowers.count where lowers[index] <= member.value && member.value <= uppers[index] {
+                    return true
+                }
+                return false
+            }
+
+            func union(_ other: CharacterSet) -> CharacterSet {
+                CharacterSet(lowers: lowers + other.lowers, uppers: uppers + other.uppers)
+            }
+        }
+
+        extension StringProtocol {
+            /// It without the scalars in `set` at either end.
+            func trimmingCharacters(in set: CharacterSet) -> String {
+                let scalars = unicodeScalars
+                var start = 0
+                var end = scalars.count
+                while start < end && set.contains(scalars[start]) {
+                    start += 1
+                }
+                while end > start && set.contains(scalars[end - 1]) {
+                    end -= 1
+                }
+                var trimmed = ""
+                for index in start..<end {
+                    trimmed.unicodeScalars.append(scalars[index])
+                }
+                return trimmed
+            }
+        }
         """
 
     /// Its Swift, its operators folded by precedence, as every file's are.

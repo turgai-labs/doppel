@@ -51,6 +51,7 @@ enum StandardLibrary {
             init(repeating repeatedValue: String, count: Int)
             init(repeating repeatedValue: Character, count: Int)
             init(describing value: Any)
+            init<C: Collection>(decoding codeUnits: C, as sourceEncoding: UTF8.Type) where C.Element == UInt8
             mutating func append(_ other: String)
             mutating func append(_ character: Character)
             mutating func removeFirst() -> Character
@@ -85,10 +86,17 @@ enum StandardLibrary {
                 init(_ value: UInt8)
                 var properties: Unicode.Scalar.Properties { get }
                 var description: String { get }
+                /// Its UTF-8 code units: Swift's view of them, read as an array.
+                var utf8: [UInt8] { get }
 
                 var isASCII: Bool { value < 128 }
             }
+
+            /// UTF-8, as text is decoded from its bytes.
+            enum UTF8 {}
         }
+
+        typealias UTF8 = Unicode.UTF8
 
         struct Character: Hashable, Comparable, Sendable, CustomStringConvertible {
             init(_ text: String)
@@ -387,8 +395,8 @@ enum StandardLibrary {
             var description: String { get }
             /// Its UTF-8 code units: Swift's view of them, read as an array.
             var utf8: [UInt8] { get }
-            /// Its Unicode scalars: Swift's view of them, read as an array.
-            var unicodeScalars: [Unicode.Scalar] { get }
+            /// Its Unicode scalars: Swift's view of them, read as an array, and set as one.
+            var unicodeScalars: [Unicode.Scalar] { get set }
             func uppercased() -> String
             func lowercased() -> String
             func hasPrefix<T: StringProtocol>(_ prefix: T) -> Bool
@@ -798,6 +806,51 @@ enum StandardLibrary {
         extension Collection where Element: Equatable {
             func firstIndex(of element: Element) -> Index? {
                 firstIndex(where: { $0 == element })
+            }
+
+            /// The parts between each run of elements that's `separator`, as Swift splits them.
+            func split<C: Collection>(separator: C, maxSplits: Int = Int.max, omittingEmptySubsequences: Bool = true) -> [SubSequence] where C.Element == Element {
+                let pattern = Array(separator)
+                if pattern.isEmpty {
+                    fatalError("Separator cannot be empty")
+                }
+                var result: [SubSequence] = []
+                if maxSplits == 0 {
+                    if !omittingEmptySubsequences || !isEmpty {
+                        result.append(self[startIndex..<endIndex])
+                    }
+                    return result
+                }
+                var start = startIndex
+                var end = startIndex
+                while end != endIndex {
+                    var probe = end
+                    var matched = true
+                    for element in pattern {
+                        if probe == endIndex || self[probe] != element {
+                            matched = false
+                            break
+                        }
+                        probe = index(after: probe)
+                    }
+                    if matched {
+                        let appended = !(start == end && omittingEmptySubsequences)
+                        if appended {
+                            result.append(self[start..<end])
+                        }
+                        end = probe
+                        start = end
+                        if appended && result.count == maxSplits {
+                            break
+                        }
+                        continue
+                    }
+                    end = index(after: end)
+                }
+                if start != endIndex || !omittingEmptySubsequences {
+                    result.append(self[start..<endIndex])
+                }
+                return result
             }
 
             /// The parts between each `separator`, as Swift splits them.

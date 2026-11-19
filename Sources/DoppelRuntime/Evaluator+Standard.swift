@@ -49,6 +49,7 @@ extension Evaluator {
             switch name {
             case "properties": return .structure("Unicode.Scalar.Properties", fields)
             case "description": return .string(String(scalar))
+            case "utf8": return .array(Array(scalar.utf8).map(Self.byte))
             default: break
             }
         case ("Unicode.Scalar.Properties", .structure(_, let fields)?):
@@ -209,6 +210,22 @@ extension Evaluator {
         throw Trap(message: "'\(member.type).\(member.member)' isn't run by Doppel yet")
     }
 
+    /// `value` with its settable standard property `member` set to `newValue`, made anew from it: a
+    /// string from its Unicode scalars.
+    func settingProperty(_ member: StandardMember, of value: Value, to newValue: Value) throws -> Value {
+        switch (member.type, member.member, newValue) {
+        case ("String", "unicodeScalars", .array(let scalars)):
+            var view = String.UnicodeScalarView()
+            for scalar in scalars {
+                guard case .structure(_, let fields) = scalar else { throw Trap(message: "not a Unicode scalar") }
+                view.append(try Self.unicodeScalar(fields))
+            }
+            return .string(String(view))
+        default:
+            throw Trap(message: "'\(member.type).\(member.member)' can't be set by Doppel yet")
+        }
+    }
+
     /// A subscript's setter: an array's element, or a dictionary's value for a key, `nil` removing it.
     func setSubscript(_ member: StandardMember, _ container: inout Value, _ keys: [Value], to value: Value) throws {
         switch container {
@@ -321,6 +338,9 @@ extension Evaluator {
             }
             return .character(character)
         case ("String", "init()", _), ("Substring", "init()", _): return .string("")
+        case ("String", "init(decoding:as:)", .data(let bytes)?): return .string(String(decoding: bytes, as: UTF8.self))
+        case ("String", "init(decoding:as:)", let source?):
+            return .string(String(decoding: try elements(of: source).map(Self.byte), as: UTF8.self))
         case ("Substring", "init(_:)", let source?):
             return .string(
                 String(
