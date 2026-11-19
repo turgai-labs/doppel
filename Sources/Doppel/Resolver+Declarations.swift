@@ -76,8 +76,27 @@ extension Resolver {
             report("\(type.kind == .actor ? "actor" : "class") '\(type.name)' has no initializers", at: name)
         }
         checkRedeclarations(in: block)
+        checkStaticStorage(in: block)
         checkConformances(of: type, at: name)
         resolveMembers(of: type, in: block)
+    }
+
+    /// A static stored property is a constant: a `static var` is state every caller shares and no
+    /// actor isolates, which Swift 6 refuses.
+    private func checkStaticStorage(in block: MemberBlockSyntax) {
+        for member in block.members {
+            guard let variable = member.decl.as(VariableDeclSyntax.self),
+                variable.bindingSpecifier.tokenKind == .keyword(.var),
+                variable.modifiers.contains(where: {
+                    [.keyword(.static), .keyword(.class)].contains($0.name.tokenKind)
+                })
+            else { continue }
+            for binding in variable.bindings where binding.accessorBlock == nil {
+                report(
+                    "static property '\(binding.pattern.trimmedDescription)' is not concurrency-safe because it is nonisolated global shared mutable state",
+                    at: binding.pattern)
+            }
+        }
     }
 
     private func checkRedeclarations(in block: MemberBlockSyntax) {

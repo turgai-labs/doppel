@@ -117,6 +117,9 @@ package indirect enum Expression {
     case character(Character)
     /// A string literal of one Unicode scalar, where a `Unicode.Scalar` is expected.
     case scalar(Unicode.Scalar)
+    /// A type's static stored property, by the type's name and its: its starting value, made the
+    /// first time it's read, as Swift makes a `static let`.
+    case staticProperty(String, String)
     case bool(Bool)
     case `nil`
     case interpolation([Piece])

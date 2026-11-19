@@ -523,6 +523,8 @@ extension Resolver {
         }
         guard let reference = expr.as(DeclReferenceExprSyntax.self) else { return nil }
         let name = reference.baseName.text
+        // `Self` in a type's code: that type, as `Self.limit` reads its static member.
+        if name == "Self", let selfType = context.selfType { return selfType.name }
         guard context.lookup(name) == nil, !(context.selfType?.properties[name] != nil), module.globals[name] == nil
         else { return nil }
         if let bound = context.typeBindingsInScope[name], let declared = bound.declarationName,
@@ -699,6 +701,9 @@ extension Resolver {
                 let propertyType = propertyType(property, of: declaring).substituting(
                     typeBindings(of: type.declaredType))
                 return Typed(.standard(StandardMember(type: typeName, member: name), on: nil, []), propertyType)
+            }
+            if property.isStored {
+                return Typed(.staticProperty(typeName, name), propertyType(property, of: declaring))
             }
             return propertyValue(property, of: type, on: base, at: node)
         }

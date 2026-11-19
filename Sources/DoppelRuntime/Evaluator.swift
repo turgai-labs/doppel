@@ -268,6 +268,7 @@ package final class Evaluator {
         case .string(let text): return .string(text)
         case .character(let character): return .character(character)
         case .scalar(let scalar): return Self.scalar(scalar)
+        case .staticProperty(let typeName, let name): return try await staticProperty(name, of: typeName)
         case .bool(let flag): return .bool(flag)
         case .nil: return .optional(nil)
         case .interpolation(let pieces):
@@ -524,6 +525,18 @@ package final class Evaluator {
     }
 
     // MARK: The host's
+
+    /// A type's static stored property: its starting value, made the first time it's read.
+    private func staticProperty(_ name: String, of typeName: String) async throws -> Value {
+        let key = "\(typeName).\(name)"
+        if let made = globalValues[key] { return made }
+        guard let type = program.type(named: typeName), let property = type.properties[name],
+            let initial = program.startingValue(of: property, in: type)
+        else { throw Trap(message: "'\(key)' has no value") }
+        let value = try await evaluate(initial.value, in: Frame(slots: initial.slots, parent: nil, selfValue: nil))
+        globalValues[key] = value
+        return value
+    }
 
     private func global(_ name: String, as type: SwiftType) async throws -> Value {
         if let made = globalValues[name] { return made }
