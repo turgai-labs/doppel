@@ -13,7 +13,7 @@ struct RuntimeTests {
         arguments: [
             "Values", "Collections", "Flow", "Characters", "Protocols", "Integers", "Strings", "Functional",
             "Foundation", "Nesting", "Optionals", "Results", "EnumSelf", "NilLiterals", "AsyncSequences",
-            "NestedGenerics", "Metatypes", "Streams", "JSON", "Text",
+            "NestedGenerics", "Metatypes", "Streams", "JSON", "Text", "Gaps",
         ])
     func printsAsSwiftDoes(_ name: String) async throws {
         let code = try String(contentsOf: Self.programs.appendingPathComponent("\(name).swift"), encoding: .utf8)
@@ -254,7 +254,8 @@ struct ObjectRunTests {
     /// JSON as a portable value, its members in their order.
     private static func portable(_ json: Any) -> Portable {
         switch json {
-        case let number as NSNumber where CFGetTypeID(number) == CFBooleanGetTypeID(): .bool(number.boolValue)
+        // A Boolean is a number of C's `char` type, on every platform.
+        case let number as NSNumber where String(cString: number.objCType) == "c": .bool(number.boolValue)
         case let number as NSNumber: .int(number.intValue)
         case let text as String: .string(text)
         case let array as [Any]: .array(array.map(portable))

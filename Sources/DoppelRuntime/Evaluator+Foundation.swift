@@ -158,6 +158,9 @@ extension Evaluator {
     /// Foundation's own members of `String`: text read from data, and written as data.
     func foundationString(_ name: String, _ text: Value?, _ arguments: [Value]) throws -> Value {
         switch (name, text, arguments.first) {
+        case ("init(format:_:)", nil, .string(let format)?):
+            guard case .array(let values) = arguments[1] else { throw Trap(message: "not the format's arguments") }
+            return .string(try formatted(format, values))
         case ("init(data:encoding:)", nil, .data(let bytes)?):
             return .optional(String(data: bytes, encoding: try Self.encoding(arguments[1])).map(Value.string))
         case ("data(using:allowLossyConversion:)", .string(let text)?, let encoding?):

@@ -319,7 +319,8 @@ extension Resolver {
         let body =
             syntax.as(FunctionDeclSyntax.self)?.body?.statements ?? syntax.as(InitializerDeclSyntax.self)?.body?
             .statements
-            ?? Self.getterStatements(syntax.as(PatternBindingSyntax.self))
+            ?? Self.getterStatements(syntax.as(PatternBindingSyntax.self)?.accessorBlock)
+            ?? Self.getterStatements(syntax.as(SubscriptDeclSyntax.self)?.accessorBlock)
         if let body {
             resolved.body = resolveBody(body, context: context, at: syntax)
         }
@@ -405,9 +406,9 @@ extension Resolver {
         return only.item.as(ExpressionStmtSyntax.self).map { !isAssignment($0.expression) } ?? false
     }
 
-    /// A computed property's getter's statements.
-    static func getterStatements(_ binding: PatternBindingSyntax?) -> CodeBlockItemListSyntax? {
-        switch binding?.accessorBlock?.accessors {
+    /// A computed property's or a subscript's getter's statements.
+    static func getterStatements(_ accessorBlock: AccessorBlockSyntax?) -> CodeBlockItemListSyntax? {
+        switch accessorBlock?.accessors {
         case .getter(let statements)?: statements
         case .accessors(let list)?: list.first { $0.accessorSpecifier.tokenKind == .keyword(.get) }?.body?.statements
         default: nil

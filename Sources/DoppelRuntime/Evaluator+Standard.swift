@@ -14,7 +14,7 @@ extension Evaluator {
         case (_, .stream(let box)?) where name == "makeAsyncIterator()": return .streamIterator(StreamIterator(box))
         case (_, .continuation(let box)?): return try await continuation(member, name, box, arguments)
         case ("Duration", nil) where !name.hasPrefix("init("): return try durationStatic(name, arguments)
-        case ("String", nil) where name == "init(data:encoding:)",
+        case ("String", nil) where name == "init(data:encoding:)" || name == "init(format:_:)",
             (_, .string?) where name == "data(using:allowLossyConversion:)":
             return try foundationString(name, base, arguments)
         case (let type, nil) where Self.jsonCoders.contains(type) && name == "init()": return .structure(type, [])

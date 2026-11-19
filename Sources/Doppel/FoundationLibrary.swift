@@ -104,8 +104,13 @@ enum FoundationLibrary {
             }
 
             init?(data: Data, encoding: String.Encoding)
+            /// Its arguments written into `format` as C's `printf` writes them.
+            init(format: String, _ arguments: any CVarArg...)
             func data(using encoding: String.Encoding, allowLossyConversion: Bool = false) -> Data?
         }
+
+        extension String: CVarArg {}
+        extension Bool: CVarArg {}
 
         /// Unicode scalars set apart, as Foundation's sets are: its scalar values, as ranges, each
         /// from a lower bound to its upper one.

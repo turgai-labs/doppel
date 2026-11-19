@@ -35,7 +35,7 @@ public struct SwiftCompiler: Sendable {
 
         public var description: String {
             switch self {
-            case .notFound: "No Swift compiler found with `xcrun --find swiftc`."
+            case .notFound: "No Swift compiler found: with `xcrun --find swiftc`, or `swiftc` on the PATH."
             case .didNotRun(let reason): "The Swift compiler didn't run: \(reason)"
             }
         }
@@ -43,9 +43,14 @@ public struct SwiftCompiler: Sendable {
 
     private let executable: URL
 
-    /// The toolchain's compiler, as `xcrun` finds it.
+    /// The toolchain's compiler: as `xcrun` finds it on Apple's platforms, and elsewhere the
+    /// `swiftc` on the PATH.
     public init() throws(Failure) {
-        let found = try? Self.output(of: URL(fileURLWithPath: "/usr/bin/xcrun"), ["--find", "swiftc"])
+        #if canImport(Darwin)
+            let found = try? Self.output(of: URL(fileURLWithPath: "/usr/bin/xcrun"), ["--find", "swiftc"])
+        #else
+            let found = try? Self.output(of: URL(fileURLWithPath: "/usr/bin/env"), ["which", "swiftc"])
+        #endif
         guard let path = found?.trimmingCharacters(in: .whitespacesAndNewlines), !path.isEmpty else { throw .notFound }
         executable = URL(fileURLWithPath: path)
     }

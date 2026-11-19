@@ -75,6 +75,9 @@ extension Resolver {
         if let subscriptCall = expr.as(SubscriptCallExprSyntax.self) { return subscripted(subscriptCall) }
         if let infix = expr.as(InfixOperatorExprSyntax.self) { return self.infix(infix, expecting: expected) }
         if let prefix = expr.as(PrefixOperatorExprSyntax.self) { return self.prefix(prefix, expecting: expected) }
+        if let postfix = expr.as(PostfixOperatorExprSyntax.self), postfix.operator.text == "..." {
+            return partialRange("PartialRangeFrom", of: postfix.expression, at: postfix)
+        }
         if let ternary = expr.as(TernaryExprSyntax.self) { return self.ternary(ternary, expecting: expected) }
         if let tryExpr = expr.as(TryExprSyntax.self) { return tried(tryExpr, expecting: expected) }
         if let awaitExpr = expr.as(AwaitExprSyntax.self) {
@@ -825,6 +828,13 @@ extension Resolver {
             report(unavailable, at: subscriptCall)
             return nil
         }
+        // One written in Swift runs as written, as a method does: the file's own, or the library's.
+        if Self.hasBody(function) {
+            let body =
+                isStandard(function)
+                ? resolvedBody(of: function, for: base.type) : resolvedBody(of: function)
+            return Typed(.call(body, on: base, resolvedArguments), result)
+        }
         return Typed(
             .standard(StandardMember(type: declarationName, member: function.written), on: base, resolvedArguments),
             result)
@@ -1083,8 +1093,25 @@ extension Resolver {
             || (expr.as(PrefixOperatorExprSyntax.self).map { isLiteral($0.expression) } ?? false)
     }
 
+    /// `bound...`, `..<bound` or `...bound`: a range of the values from or up to `bound`.
+    private func partialRange(_ typeName: String, of bound: ExprSyntax, at node: some SyntaxProtocol) -> Typed? {
+        guard let value = expression(bound, expecting: nil), let type = module.type(named: typeName),
+            let initializer = type.initializers.first
+        else { return nil }
+        guard conforms(value.type, to: "Comparable") else {
+            report("type '\(value.type)' does not conform to protocol 'Comparable'", at: bound)
+            return nil
+        }
+        let range = SwiftType.named(typeName, arguments: [value.type])
+        return Typed(.initialize(typeName, resolvedBody(of: initializer, for: range), [.value(value)]), range)
+    }
+
     private func prefix(_ prefix: PrefixOperatorExprSyntax, expecting expected: SwiftType?) -> Typed? {
         switch prefix.operator.text {
+        case "..<":
+            return partialRange("PartialRangeUpTo", of: prefix.expression, at: prefix)
+        case "...":
+            return partialRange("PartialRangeThrough", of: prefix.expression, at: prefix)
         case "!":
             guard let value = booleanCondition(prefix.expression) else { return nil }
             return Typed(.unary("!", value), .bool)

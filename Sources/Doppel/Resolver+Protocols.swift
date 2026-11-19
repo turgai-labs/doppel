@@ -203,6 +203,7 @@ extension Resolver {
         guard let syntax = function.syntax else { return false }
         if let decl = syntax.as(FunctionDeclSyntax.self) { return decl.body != nil }
         if let decl = syntax.as(InitializerDeclSyntax.self) { return decl.body != nil }
+        if let decl = syntax.as(SubscriptDeclSyntax.self) { return getterStatements(decl.accessorBlock) != nil }
         if let binding = syntax.as(PatternBindingSyntax.self) {
             switch binding.accessorBlock?.accessors {
             case .getter?: return true
@@ -262,7 +263,8 @@ extension Resolver {
         let body =
             syntax.as(FunctionDeclSyntax.self)?.body?.statements ?? syntax.as(InitializerDeclSyntax.self)?.body?
             .statements
-            ?? Self.getterStatements(syntax.as(PatternBindingSyntax.self))
+            ?? Self.getterStatements(syntax.as(PatternBindingSyntax.self)?.accessorBlock)
+            ?? Self.getterStatements(syntax.as(SubscriptDeclSyntax.self)?.accessorBlock)
         if let body { resolved.body = resolveBody(body, context: context, at: syntax) }
         resolved.slots = context.frame.slots
         return resolved

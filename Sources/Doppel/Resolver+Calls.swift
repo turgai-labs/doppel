@@ -1019,7 +1019,8 @@ extension Resolver {
     private func selfProperty(
         _ property: Property, of type: TypeDeclaration, at node: some SyntaxProtocol, method: String?
     ) -> (Place, SwiftType)? {
-        let propertyType = propertyType(property, of: type)
+        // As the body is resolved for: `Bound` as `Int` in the standard library's own Swift.
+        let propertyType = propertyType(property, of: type).substituting(context.typeBindingsInScope)
         guard property.isStored, let index = type.stored.firstIndex(where: { $0.name == property.name }) else {
             if property.mutable { return (.stored(nil, index: -1), propertyType) }
             report("cannot assign to property: '\(property.name)' is a get-only property", at: node)

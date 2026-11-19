@@ -21,9 +21,12 @@ enum StandardLibrary {
         protocol BinaryInteger: Hashable, Comparable, CustomStringConvertible {}
         protocol FixedWidthInteger: BinaryInteger {}
 
-        struct Int: Sendable, Codable, FixedWidthInteger {}
+        /// What C's formatting takes: numbers, and with Foundation, text.
+        protocol CVarArg {}
 
-        struct Double: Hashable, Comparable, Sendable, Codable, CustomStringConvertible {
+        struct Int: Sendable, Codable, FixedWidthInteger, CVarArg {}
+
+        struct Double: Hashable, Comparable, Sendable, Codable, CustomStringConvertible, CVarArg {
             init(_ value: Double)
             init(_ value: Int)
             init<T: BinaryInteger>(_ value: T)
@@ -97,6 +100,7 @@ enum StandardLibrary {
         }
 
         typealias UTF8 = Unicode.UTF8
+        typealias UnicodeScalar = Unicode.Scalar
 
         struct Character: Hashable, Comparable, Sendable, CustomStringConvertible {
             init(_ text: String)
@@ -803,6 +807,47 @@ enum StandardLibrary {
             }
         }
 
+        /// The values from a bound on: what `bound...` makes.
+        struct PartialRangeFrom<Bound: Comparable> {
+            let lowerBound: Bound
+
+            init(_ lowerBound: Bound) {
+                self.lowerBound = lowerBound
+            }
+        }
+
+        /// The values up to a bound, not it: what `..<bound` makes.
+        struct PartialRangeUpTo<Bound: Comparable> {
+            let upperBound: Bound
+
+            init(_ upperBound: Bound) {
+                self.upperBound = upperBound
+            }
+        }
+
+        /// The values up to a bound, and it: what `...bound` makes.
+        struct PartialRangeThrough<Bound: Comparable> {
+            let upperBound: Bound
+
+            init(_ upperBound: Bound) {
+                self.upperBound = upperBound
+            }
+        }
+
+        extension Collection {
+            subscript(r: PartialRangeFrom<Index>) -> SubSequence {
+                self[r.lowerBound..<endIndex]
+            }
+
+            subscript(r: PartialRangeUpTo<Index>) -> SubSequence {
+                self[startIndex..<r.upperBound]
+            }
+
+            subscript(r: PartialRangeThrough<Index>) -> SubSequence {
+                self[startIndex..<index(after: r.upperBound)]
+            }
+        }
+
         extension Collection where Element: Equatable {
             func firstIndex(of element: Element) -> Index? {
                 firstIndex(where: { $0 == element })
@@ -966,7 +1011,9 @@ enum StandardLibrary {
 
     /// The integer types: each one `FixedWidthInteger`, which gives it all it has.
     private static var fixedIntegers: String {
-        FixedInteger.allCases.map { "\nstruct \($0.rawValue): Sendable, Codable, FixedWidthInteger {}" }.joined()
+        FixedInteger.allCases.map {
+            "\nstruct \($0.rawValue): Sendable, Codable, FixedWidthInteger, CVarArg {}"
+        }.joined()
             + integers
     }
 
