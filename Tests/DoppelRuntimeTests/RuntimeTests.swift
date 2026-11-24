@@ -152,6 +152,35 @@ struct ObjectRunTests {
         }
     }
 
+    /// A property is read as Swift reads it: a stored one's value, a computed one's getter run on
+    /// the actor, what it gives crossing as `Codable` writes it.
+    @Test func aPropertyIsReadAsSwiftReadsIt() async throws {
+        let code = """
+            struct Line: Codable {
+                var words: String
+            }
+
+            actor Counter {
+                var count = 2
+                var lines: [Line] {
+                    (0..<count).map { Line(words: "Line \\($0)") }
+                }
+
+                func add() { count += 1 }
+            }
+            """
+        let object = try await LiveActor(
+            type: "Counter", in: "Counter.swift", of: [.init(name: "Counter.swift", code: code)], module: "counter",
+            host: RecordingHost())
+        #expect(try await object.read("count") == .int(2))
+        #expect(
+            try await object.read("lines")
+                == .array([.object([("words", .string("Line 0"))]), .object([("words", .string("Line 1"))])]))
+        _ = try await object.call("add", arguments: [])
+        #expect(try await object.read("lines").description.contains("Line 2"))
+        await #expect(throws: Trap.self) { try await object.read("missing") }
+    }
+
     /// Data crosses as `Codable` writes it, as base64 text, and what isn't base64 is refused as
     /// `JSONDecoder` refuses it.
     @Test func dataCrossesAsBase64Text() async throws {

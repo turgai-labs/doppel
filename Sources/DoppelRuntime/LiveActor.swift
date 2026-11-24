@@ -109,6 +109,23 @@ public final class LiveActor {
             value, as: evaluator.fieldType(declaration, index), at: ValuePath(named: name))
     }
 
+    /// Its property `name`, stored or computed, as `Codable` writes it: a computed one's getter
+    /// runs on the actor, as reading it in Swift does.
+    public func read(_ name: String) async throws -> Portable {
+        guard let property = declaration.properties[name], !property.isStatic else {
+            throw Trap(message: "'\(declaration.name)' has no '\(name)'")
+        }
+        let value: Value
+        if property.isStored, let index = declaration.storedNames.firstIndex(of: name) {
+            value = instance.fields[index]
+        } else if let getter = property.getter {
+            value = try await evaluator.run(evaluator.program.body(of: getter), on: .actor(instance), arguments: [])
+        } else {
+            throw Trap(message: "'\(declaration.name)' has no '\(name)' to read")
+        }
+        return try evaluator.portable(value, as: evaluator.program.type(of: property, in: declaration))
+    }
+
     /// The `Task { … }` its code started as `id`, run.
     public func runTask(_ id: Int) async throws {
         try await evaluator.runTask(id)

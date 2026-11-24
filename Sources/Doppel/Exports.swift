@@ -24,6 +24,10 @@ extension ResolvedProgram {
         resolver.propertyType(type.stored[index], of: type)
     }
 
+    package func type(of property: Property, in type: TypeDeclaration) -> SwiftType {
+        resolver.propertyType(property, of: type)
+    }
+
     package func rawValue(of type: TypeDeclaration, case name: String) -> RawValue? {
         guard let raw = type.rawType else { return nil }
         var next = 0
