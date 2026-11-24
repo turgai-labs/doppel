@@ -133,6 +133,8 @@ extension Resolver {
             var bindings = typeBindings(of: type.declaredType).filter { protocolType.associatedTypes.contains($0.key) }
             bindings["Self"] = type.declaredType
             let associated = Set(protocolType.associatedTypes + ["Self"])
+            let isolated = !protocolType.refines.contains("Actor") && conformance != "Actor"
+            var met = true
             for requirement in protocolType.requirements {
                 guard
                     let method = type.methods[requirement.name]?.first(where: {
@@ -140,14 +142,38 @@ extension Resolver {
                     })
                 else {
                     report("type '\(type.name)' does not conform to protocol '\(conformance)'", at: name)
+                    met = false
                     break
                 }
-                let isolated = !protocolType.refines.contains("Actor") && conformance != "Actor"
                 if type.kind == .actor, isolated, !requirement.effects.async, let syntax = method.syntax {
                     report(
                         "actor-isolated instance method '\(method.written)' cannot be used to satisfy nonisolated requirement from protocol '\(conformance)'",
                         at: syntax.as(FunctionDeclSyntax.self)?.name ?? syntax.firstToken(viewMode: .sourceAccurate)
                             ?? TokenSyntax(.wildcard, presence: .missing))
+                }
+            }
+            guard met else { continue }
+            // Each property it requires: one of its name and type, settable when it must be set,
+            // whose getter is no more `async` or `throws` than the requirement's.
+            for (property, requirement) in protocolType.properties.sorted(by: { $0.key < $1.key })
+            where !requirement.isStatic {
+                guard let witness = type.properties[property], !witness.isStatic,
+                    infer(
+                        propertyType(requirement, of: protocolType), from: propertyType(witness, of: type), associated,
+                        &bindings),
+                    !requirement.mutable || witness.mutable,
+                    !witness.effects.async || requirement.effects.async,
+                    !witness.effects.throwing || requirement.effects.throwing
+                else {
+                    report("type '\(type.name)' does not conform to protocol '\(conformance)'", at: name)
+                    break
+                }
+                // An actor's own state, for a protocol that isn't of actors, read without waiting.
+                if type.kind == .actor, isolated, !requirement.effects.async {
+                    report(
+                        "conformance of '\(type.name)' to protocol '\(conformance)' crosses into actor-isolated code and can cause data races",
+                        at: name)
+                    break
                 }
             }
         }
