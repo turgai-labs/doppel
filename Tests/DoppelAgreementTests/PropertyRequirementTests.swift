@@ -50,4 +50,23 @@ struct PropertyRequirementTests {
             ours.map(\.line) == swift.map(\.line),
             "Swift: \(swift.map { "\($0.line): \($0.message)" }), Doppel: \(ours.map { "\($0.line): \($0.message)" })")
     }
+
+    /// A property in a type has its accessors' bodies: one written as a protocol requires it,
+    /// `{ get }`, is refused as Swift refuses it.
+    @Test(
+        arguments: [
+            "actor Page {\n    var layout: Int { get }\n}",
+            "struct Page {\n    var layout: Int { get set }\n}",
+            "actor Page {\n    var layout: Int { 1 }\n}",
+            "actor Page {\n    var layout: Int { get { 1 } }\n}",
+        ])
+    func accessorsHaveBodies(_ code: String) throws {
+        let files = [SwiftCheck.File(name: "Object.swift", code: code)]
+        let swift = try SwiftCompiler().typecheck(files.map { .init(name: $0.name, code: $0.code) })
+            .filter { $0.severity == .error && $0.file == "Object.swift" }
+        let ours = SwiftCheck.problems(in: "Object.swift", of: files)
+        #expect(
+            ours.map(\.line) == swift.map(\.line),
+            "Swift: \(swift.map { "\($0.line): \($0.message)" }), Doppel: \(ours.map { "\($0.line): \($0.message)" })")
+    }
 }

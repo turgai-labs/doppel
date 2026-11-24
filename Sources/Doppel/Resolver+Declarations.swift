@@ -77,6 +77,7 @@ extension Resolver {
         }
         checkRedeclarations(in: block)
         checkStaticStorage(in: block)
+        checkAccessorBodies(in: block)
         checkConformances(of: type, at: name)
         resolveMembers(of: type, in: block)
     }
@@ -95,6 +96,20 @@ extension Resolver {
                 report(
                     "static property '\(binding.pattern.trimmedDescription)' is not concurrency-safe because it is nonisolated global shared mutable state",
                     at: binding.pattern)
+            }
+        }
+    }
+
+    /// A property's accessors have bodies: `{ get }` with none says what a protocol requires, and
+    /// declares nothing in a type, which Swift refuses.
+    private func checkAccessorBodies(in block: MemberBlockSyntax) {
+        for member in block.members {
+            guard let variable = member.decl.as(VariableDeclSyntax.self) else { continue }
+            for binding in variable.bindings {
+                guard case .accessors(let accessors)? = binding.accessorBlock?.accessors,
+                    let bodiless = accessors.first(where: { $0.body == nil })
+                else { continue }
+                report("expected '{' to start getter definition", at: bodiless)
             }
         }
     }
