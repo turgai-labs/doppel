@@ -26,14 +26,17 @@ public enum SwiftCheck {
         public let message: String
         /// The code it's about, as written, on one line, when it's known.
         public let code: String?
+        /// What Swift says under it, as its notes: what a protocol requires that's missing.
+        public let notes: [String]
 
         public var description: String { "\(line):\(column): \(message)" }
 
-        public init(line: Int, column: Int, message: String, code: String? = nil) {
+        public init(line: Int, column: Int, message: String, code: String? = nil, notes: [String] = []) {
             self.line = line
             self.column = column
             self.message = message
             self.code = code
+            self.notes = notes
         }
     }
 
@@ -146,7 +149,7 @@ final class Resolver {
     private var speculating = 0
     private var failedSpeculatively = false
 
-    func report(_ message: String, at node: some SyntaxProtocol) {
+    func report(_ message: String, at node: some SyntaxProtocol, notes: [String] = []) {
         if speculating > 0 {
             failedSpeculatively = true
             return
@@ -162,7 +165,7 @@ final class Resolver {
         let written = node.trimmedDescription
         let diagnostic = SwiftCheck.Diagnostic(
             line: location.line, column: location.column, message: message,
-            code: written.contains("\n") || written.isEmpty ? nil : written)
+            code: written.contains("\n") || written.isEmpty ? nil : written, notes: notes)
         if !diagnostics.contains(diagnostic) { diagnostics.append(diagnostic) }
     }
 

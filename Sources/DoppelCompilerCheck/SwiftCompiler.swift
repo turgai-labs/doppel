@@ -124,8 +124,7 @@ public struct SwiftCompiler: Sendable {
         output.split(separator: "\n").compactMap { line in
             let parts = line.split(separator: ":", maxSplits: 4, omittingEmptySubsequences: false)
             guard parts.count == 5, let number = Int(parts[1]), let column = Int(parts[2]),
-                let severity = Diagnostic.Severity(rawValue: parts[3].trimmingCharacters(in: .whitespaces)),
-                severity != .note
+                let severity = Diagnostic.Severity(rawValue: parts[3].trimmingCharacters(in: .whitespaces))
             else { return nil }
             let path = String(parts[0])
             guard path.hasPrefix(directory + "/") else { return nil }

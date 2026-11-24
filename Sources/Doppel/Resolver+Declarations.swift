@@ -149,49 +149,63 @@ extension Resolver {
             bindings["Self"] = type.declaredType
             let associated = Set(protocolType.associatedTypes + ["Self"])
             let isolated = !protocolType.refines.contains("Actor") && conformance != "Actor"
-            var met = true
+            // Each requirement it doesn't meet, as Swift's notes say it: what the protocol requires.
+            var missing: [String] = []
+            var isolatedMethods: [(Function, Syntax)] = []
             for requirement in protocolType.requirements {
                 guard
                     let method = type.methods[requirement.name]?.first(where: {
                         matches($0, requirement, associated: associated, bindings: &bindings)
                     })
                 else {
-                    report("type '\(type.name)' does not conform to protocol '\(conformance)'", at: name)
-                    met = false
-                    break
+                    missing.append(
+                        "protocol requires function '\(requirement.name)' with type '\(Self.written(requirement))'")
+                    continue
                 }
                 if type.kind == .actor, isolated, !requirement.effects.async, let syntax = method.syntax {
-                    report(
-                        "actor-isolated instance method '\(method.written)' cannot be used to satisfy nonisolated requirement from protocol '\(conformance)'",
-                        at: syntax.as(FunctionDeclSyntax.self)?.name ?? syntax.firstToken(viewMode: .sourceAccurate)
-                            ?? TokenSyntax(.wildcard, presence: .missing))
+                    isolatedMethods.append((method, syntax))
                 }
             }
-            guard met else { continue }
             // Each property it requires: one of its name and type, settable when it must be set,
             // whose getter is no more `async` or `throws` than the requirement's.
+            var crosses = false
             for (property, requirement) in protocolType.properties.sorted(by: { $0.key < $1.key })
             where !requirement.isStatic {
+                let required = propertyType(requirement, of: protocolType)
                 guard let witness = type.properties[property], !witness.isStatic,
-                    infer(
-                        propertyType(requirement, of: protocolType), from: propertyType(witness, of: type), associated,
-                        &bindings),
+                    infer(required, from: propertyType(witness, of: type), associated, &bindings),
                     !requirement.mutable || witness.mutable,
                     !witness.effects.async || requirement.effects.async,
                     !witness.effects.throwing || requirement.effects.throwing
                 else {
-                    report("type '\(type.name)' does not conform to protocol '\(conformance)'", at: name)
-                    break
+                    missing.append("protocol requires property '\(property)' with type '\(required)'")
+                    continue
                 }
                 // An actor's own state, for a protocol that isn't of actors, read without waiting.
-                if type.kind == .actor, isolated, !requirement.effects.async {
-                    report(
-                        "conformance of '\(type.name)' to protocol '\(conformance)' crosses into actor-isolated code and can cause data races",
-                        at: name)
-                    break
-                }
+                if type.kind == .actor, isolated, !requirement.effects.async { crosses = true }
+            }
+            guard missing.isEmpty else {
+                report("type '\(type.name)' does not conform to protocol '\(conformance)'", at: name, notes: missing)
+                continue
+            }
+            for (method, syntax) in isolatedMethods {
+                report(
+                    "actor-isolated instance method '\(method.written)' cannot be used to satisfy nonisolated requirement from protocol '\(conformance)'",
+                    at: syntax.as(FunctionDeclSyntax.self)?.name ?? syntax.firstToken(viewMode: .sourceAccurate)
+                        ?? TokenSyntax(.wildcard, presence: .missing))
+            }
+            if crosses {
+                report(
+                    "conformance of '\(type.name)' to protocol '\(conformance)' crosses into actor-isolated code and can cause data races",
+                    at: name)
             }
         }
+    }
+
+    /// A function's type, as Swift writes it in a note: `(String) async -> String`.
+    static func written(_ function: Function) -> String {
+        "(\(function.parameters.map(\.type.description).joined(separator: ", ")))\(function.effects.written) -> "
+            + function.result.description
     }
 
     /// Whether `method` meets `requirement`, its associated types bound as they're met: one bound

@@ -69,4 +69,32 @@ struct PropertyRequirementTests {
             ours.map(\.line) == swift.map(\.line),
             "Swift: \(swift.map { "\($0.line): \($0.message)" }), Doppel: \(ours.map { "\($0.line): \($0.message)" })")
     }
+
+    /// A type that doesn't conform is told what's missing as Swift's notes say it: each requirement
+    /// it doesn't meet, with its type.
+    @Test(
+        arguments: [
+            (
+                "protocol Shown: Actor {\n    var layout: Int { get }\n}",
+                "actor Page: Shown {\n    var body: Int { 1 }\n}"
+            ),
+            (
+                "protocol Asks: Actor {\n    func ask(_ question: String) async -> String\n}",
+                "actor Desk: Asks {\n    func ask(_ question: Int) -> String { \"\" }\n}"
+            ),
+            (
+                "protocol Both: Actor {\n    var layout: Int { get }\n    func pressed(_ label: String)\n}",
+                "actor Page: Both {\n    var count = 0\n}"
+            ),
+        ] as [(String, String)])
+    func whatsMissingIsSaid(_ declared: String, _ code: String) throws {
+        let files = [
+            SwiftCheck.File(name: "Object.swift", code: code), SwiftCheck.File(name: "Objects.swift", code: declared),
+        ]
+        let swift = try SwiftCompiler().typecheck(files.map { .init(name: $0.name, code: $0.code) })
+            .filter { $0.severity == .note && $0.message.hasPrefix("protocol requires") }.map(\.message)
+        let ours = SwiftCheck.problems(in: "Object.swift", of: files).flatMap(\.notes)
+        #expect(Set(ours) == Set(swift), "Swift: \(swift), Doppel: \(ours)")
+        #expect(!ours.isEmpty)
+    }
 }
