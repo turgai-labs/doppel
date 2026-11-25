@@ -666,7 +666,15 @@ extension Resolver {
             return .return(nil)
         }
         if context.kind == .initializer {
-            report("'nil' is the only return value permitted in an initializer", at: value)
+            // A failable initializer's `return nil`: it fails, and makes nothing.
+            if value.is(NilLiteralExprSyntax.self) {
+                guard context.failable else {
+                    report("only a failable initializer can return 'nil'", at: returnStmt)
+                    return nil
+                }
+                return .return(Typed(.nil, .optional(.void)))
+            }
+            report("'nil' is the only return value permitted in an initializer", at: returnStmt)
             return nil
         }
         guard let typed = expression(value, expecting: context.result) else { return nil }

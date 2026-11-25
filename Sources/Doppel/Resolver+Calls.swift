@@ -441,10 +441,13 @@ extension Resolver {
         if type.kind == .enumeration, function.syntax == nil, case .value(let raw)? = resolvedArguments.first {
             return Typed(.fromRawValue(typeName, raw), result)
         }
-        // The standard library's own Swift is resolved for the type it makes, as its methods are.
+        // The standard library's own Swift is resolved for the type it makes, as its methods are: a
+        // failable one's, for the type it makes when it doesn't fail.
+        var made = result
+        if function.isFailable, case .optional(let wrapped) = result { made = wrapped }
         let body =
             function.syntax == nil
-            ? nil : isStandard(function) ? resolvedBody(of: function, for: result) : resolvedBody(of: function)
+            ? nil : isStandard(function) ? resolvedBody(of: function, for: made) : resolvedBody(of: function)
         return Typed(.initialize(typeName, body, resolvedArguments), result)
     }
 
@@ -967,8 +970,9 @@ extension Resolver {
                     propertyType(property, of: type)
                 )
             }
+            // A struct's, or one the library declares with its storage, as Foundation's `Calendar`.
             guard case .named(let typeName, _) = baseType, let type = module.type(named: typeName),
-                type.kind == .structure,
+                type.kind == .structure || type.kind == .standard,
                 let property = type.properties[name], let index = type.stored.firstIndex(where: { $0.name == name })
             else {
                 report("cannot assign to property: '\(name)' is not settable", at: member.declName)

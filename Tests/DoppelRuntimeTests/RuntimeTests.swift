@@ -13,7 +13,7 @@ struct RuntimeTests {
         arguments: [
             "Values", "Collections", "Flow", "Characters", "Protocols", "Integers", "Strings", "Functional",
             "Foundation", "Nesting", "Optionals", "Results", "EnumSelf", "NilLiterals", "AsyncSequences",
-            "NestedGenerics", "Metatypes", "Streams", "JSON", "Text", "Gaps", "Statics",
+            "NestedGenerics", "Metatypes", "Streams", "JSON", "Text", "Gaps", "Statics", "Calendars", "FailableInits",
         ])
     func printsAsSwiftDoes(_ name: String) async throws {
         let code = try String(contentsOf: Self.programs.appendingPathComponent("\(name).swift"), encoding: .utf8)

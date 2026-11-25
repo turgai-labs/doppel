@@ -400,6 +400,7 @@ extension Resolver {
         for parameter in function.parameters {
             _ = context.declare(parameter.name, type: parameter.type, mutable: parameter.isInout)
         }
+        context.failable = isInitializer && function.isFailable
         if isInitializer, let owner {
             context.unassignedStored = Set(owner.stored.filter { !$0.hasValue }.map(\.name))
         }

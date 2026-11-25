@@ -621,8 +621,12 @@ package final class Evaluator {
         let frame = Frame(
             slots: max(initializer.slots, arguments.count), parent: nil, selfValue: .structure(typeName, fields))
         for (index, argument) in arguments.enumerated() { frame.slots[index] = argument }
-        _ = try await body(initializer.body, in: frame)
-        return frame.selfValue ?? .structure(typeName, fields)
+        let returned = try await body(initializer.body, in: frame)
+        let made = frame.selfValue ?? .structure(typeName, fields)
+        // A failable initializer makes an optional: none when it returned `nil`.
+        guard initializer.declaration.isFailable else { return made }
+        if case .optional(nil) = returned { return .optional(nil) }
+        return .optional(made)
     }
 
     func field(_ index: Int, of value: Value) throws -> Value {

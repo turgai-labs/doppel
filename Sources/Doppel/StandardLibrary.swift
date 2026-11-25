@@ -425,6 +425,20 @@ enum StandardLibrary {
             typealias SubSequence = [Element]
         }
 
+        extension Array {
+            /// Sorted in place, the elements that are equal kept in the order they were in, as
+            /// Swift's sort keeps them.
+            mutating func sort(by areInIncreasingOrder: (Element, Element) throws -> Bool) rethrows {
+                self = try sorted(by: areInIncreasingOrder)
+            }
+        }
+
+        extension Array where Element: Comparable {
+            mutating func sort() {
+                self = sorted()
+            }
+        }
+
         extension Set: Collection {
             typealias Index = Int
             typealias SubSequence = [Element]

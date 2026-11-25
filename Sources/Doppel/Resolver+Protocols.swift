@@ -254,6 +254,7 @@ extension Resolver {
         context.typeBindings = bindings
         context.fixedParameters = Set((owner?.generics ?? []) + function.generics)
         // An initializer gives each stored property its value, as one in the file does.
+        context.failable = isInitializer && function.isFailable
         if isInitializer, let owner {
             context.unassignedStored = Set(owner.stored.filter { !$0.hasValue }.map(\.name))
         }

@@ -270,7 +270,8 @@ extension Evaluator {
             }
         case "fatalError(_:)":
             throw Trap(message: "Fatal error: \(try string(arguments[0]))")
-        default: break
+        default:
+            if let result = try foundationGlobal(name, arguments) { return result }
         }
         throw Trap(message: "'\(name)' isn't run by Doppel yet")
     }

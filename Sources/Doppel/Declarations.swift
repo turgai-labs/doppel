@@ -133,6 +133,9 @@ package final class Function {
     /// What its generic parameters must be: `where Element: Equatable`, `where Element == String`.
     package let requirements: [Requirement]
 
+    /// A failable initializer, `init?`, as it's written: it makes an optional, `nil` when it fails.
+    package var isFailable: Bool { syntax?.as(InitializerDeclSyntax.self)?.optionalMark != nil }
+
     package init(
         name: String, parameters: [Parameter], result: SwiftType, effects: Effects, isRethrowing: Bool = false,
         generics: [String] = [],

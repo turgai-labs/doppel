@@ -378,6 +378,8 @@ final class FunctionContext {
     var unassigned: Set<Local> = []
     /// An initializer's stored properties that haven't been given a value on every path.
     var unassignedStored: Set<String> = []
+    /// A failable initializer, `init?`: one that may return `nil`.
+    var failable = false
     /// How many `do` blocks with a catch-all it's in: what's tried there is handled there.
     var catching = 0
     /// What it did: whether it waited or threw, for a closure whose effects are inferred.
