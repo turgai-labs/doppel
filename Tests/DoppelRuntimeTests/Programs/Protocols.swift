@@ -42,7 +42,9 @@ actor Program {
         print(title[title.startIndex..<end], title[end], title.distance(from: title.startIndex, to: end))
         print(title.first ?? "?", title.last ?? "?", title.firstIndex(of: "S") != nil, title.filter { $0 != "a" })
         let letters = Array(title.prefix(4))
-        print(letters, Array(letters.reversed()), letters[1..<3], letters.firstIndex(of: "m") ?? -1, letters.lastIndex(of: "a") ?? -1)
+        print(
+            letters, Array(letters.reversed()), letters[1..<3], letters.firstIndex(of: "m") ?? -1,
+            letters.lastIndex(of: "a") ?? -1)
         print(title.prefix(while: { $0 != " " }), title.drop(while: { $0 != " " }), title.indices.count)
         for (offset, ch) in "abc".enumerated() {
             print(offset, ch, terminator: " ")
@@ -50,7 +52,9 @@ actor Program {
         print()
         var words = ["one"]
         words.append(contentsOf: ["two", "three"])
-        print(words.map { $0.count }, words.sorted(), words.min() ?? "", words.contains("two"), words.dropFirst().joined(separator: "+"))
+        print(
+            words.map { $0.count }, words.sorted(), words.min() ?? "", words.contains("two"),
+            words.dropFirst().joined(separator: "+"))
         print(Person(name: "Ann").greeting(2), [3, 1, 2].sorted(by: >), [1, 2, 3, 4].filter { $0.isMultiple(of: 2) })
     }
 }

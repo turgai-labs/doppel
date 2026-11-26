@@ -33,7 +33,9 @@ actor Program {
         if let half = Percent(50) {
             print(half.value)
         }
-        print(Percent(text: "7")?.value ?? -1, Percent(text: "") == nil, Percent(text: "x") == nil, Percent(text: "700") == nil)
+        print(
+            Percent(text: "7")?.value ?? -1, Percent(text: "") == nil, Percent(text: "x") == nil,
+            Percent(text: "700") == nil)
         print(Size(code: "S") == .small, Size(code: "M") == nil)
         let sizes = ["S", "M", "L"].compactMap { Size(code: $0) }
         print(sizes.count)

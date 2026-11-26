@@ -16,7 +16,9 @@ actor Program {
         print(counts.count, counts.values.reduce(0, +))
         let numbers = [5, 3, 8, 1]
         print(numbers.sorted(), numbers.sorted(by: >), numbers.map { $0 * 2 }, numbers.filter { $0 > 3 })
-        print(numbers.reduce(0) { $0 + $1 }, numbers.min() ?? 0, numbers.max() ?? 0, numbers.contains(8), numbers.firstIndex(of: 8) ?? -1)
+        print(
+            numbers.reduce(0) { $0 + $1 }, numbers.min() ?? 0, numbers.max() ?? 0, numbers.contains(8),
+            numbers.firstIndex(of: 8) ?? -1)
         // `reversed()` is a view in Swift, which prints as its internals; Doppel's is the
         // array it reads as.
         print(numbers.prefix(2), numbers.dropFirst(), Array(numbers.reversed()), numbers.first(where: { $0 < 4 }) ?? 0)

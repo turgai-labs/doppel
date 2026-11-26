@@ -41,7 +41,9 @@ actor Program {
         iso.timeZone = TimeZone(identifier: "UTC")!
         print(iso.firstWeekday, iso.minimumDaysInFirstWeek, calendar.firstWeekday, calendar.minimumDaysInFirstWeek)
         print(iso.component(.weekOfYear, from: start), iso.component(.yearForWeekOfYear, from: start))
-        print(calendar.isDateInWeekend(start), calendar.isDateInWeekend(calendar.date(byAdding: .day, value: 3, to: start)!))
+        print(
+            calendar.isDateInWeekend(start),
+            calendar.isDateInWeekend(calendar.date(byAdding: .day, value: 3, to: start)!))
 
         var numbers = [5, 3, 9, 1]
         numbers.sort()

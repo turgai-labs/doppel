@@ -1,18 +1,18 @@
 actor Program {
     func fnv1a32(_ text: String) -> UInt32 {
-        var hash: UInt32 = 2166136261
+        var hash: UInt32 = 2_166_136_261
         for ch in text {
             hash ^= UInt32(ch.asciiValue ?? 0)
-            hash = hash &* 16777619
+            hash = hash &* 16_777_619
         }
         return hash
     }
 
     func fnv1a64(_ values: [Int]) -> UInt64 {
-        var hash: UInt64 = 14695981039346656037
+        var hash: UInt64 = 14_695_981_039_346_656_037
         for value in values {
             hash ^= UInt64(value)
-            hash = hash &* 1099511628211
+            hash = hash &* 1_099_511_628_211
         }
         return hash
     }
@@ -38,7 +38,9 @@ actor Program {
         print(small, wrapped, UInt8(truncatingIfNeeded: 300), UInt8(exactly: 300) == nil, Int(UInt16(65535)))
         let big: UInt64 = 1 << 63
         print(big, Double(UInt32(7)) / 2, Int32(-5) / 2, Int32(-5) % 2, UInt32(10).isMultiple(of: 5))
-        print(String(255, radix: 2), String(-255, radix: 16), String(repeating: "ab", count: 3), String(repeating: Character("x"), count: 2))
+        print(
+            String(255, radix: 2), String(-255, radix: 16), String(repeating: "ab", count: 3),
+            String(repeating: Character("x"), count: 2))
         let values: [UInt8] = [3, 1, 2]
         print(values.sorted(), values.max() ?? 0, [UInt16(1): "one"][1] ?? "none")
     }

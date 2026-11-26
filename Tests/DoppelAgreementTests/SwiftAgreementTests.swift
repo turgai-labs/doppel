@@ -92,12 +92,15 @@ struct Module {
             .filter { $0.hasDirectoryPath }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
             .map { folder in
+                // Kept as text, `Object.swift.txt`: written by agents as they were, not this package's
+                // code. Each is checked under its Swift name.
                 let files = try manager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-                    .filter { $0.pathExtension == "swift" }
+                    .filter { $0.lastPathComponent.hasSuffix(".swift.txt") }
                     .sorted { $0.lastPathComponent < $1.lastPathComponent }
                     .map {
                         SwiftCompiler.File(
-                            name: $0.lastPathComponent, code: try String(contentsOf: $0, encoding: .utf8))
+                            name: $0.deletingPathExtension().lastPathComponent,
+                            code: try String(contentsOf: $0, encoding: .utf8))
                     }
                 return Module(name: folder.lastPathComponent, files: files)
             }

@@ -17,6 +17,8 @@ actor Program {
         let made = Optional(3)
         let some = Optional.some("tea")
         let none: Int? = Optional.none
+        // The generic spelling is what's read here.
+        // swift-format-ignore: UseShorthandTypeNames
         let specialized = Optional<String>("cup")
         print(made as Any, some as Any, none as Any, specialized as Any)
         print(describe(made), describe(Optional(12)), describe(.none))

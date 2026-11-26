@@ -93,7 +93,9 @@ struct ObjectRunTests {
     func files() throws -> [SwiftCheck.File] {
         try ["Objects.swift", "Runtime.swift", "Object.swift"].map { name in
             SwiftCheck.File(
-                name: name, code: try String(contentsOf: Self.bridge.appendingPathComponent(name), encoding: .utf8))
+                // Kept as text, under its Swift name with `.txt`.
+                name: name,
+                code: try String(contentsOf: Self.bridge.appendingPathComponent(name + ".txt"), encoding: .utf8))
         }
     }
 

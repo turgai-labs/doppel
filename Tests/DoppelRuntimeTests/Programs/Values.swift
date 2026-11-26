@@ -11,7 +11,9 @@ struct Point: Equatable {
 }
 
 enum Status: String {
-    case placed, refunded = "back", denied
+    case placed
+    case refunded = "back"
+    case denied
 }
 
 enum Item {
@@ -42,7 +44,7 @@ actor Program {
         for item in items {
             switch item {
             case .text(let words): print("text", words)
-            case let .button(label): print("button", label)
+            case .button(let label): print("button", label)
             case .pair(let x, let y) where x < y: print("pair", x + y)
             case .pair: print("other pair")
             }

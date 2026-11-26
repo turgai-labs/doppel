@@ -23,9 +23,11 @@ actor Program {
         print(words, words.count)
         let initials = tracks.compactMap { $0.title.first }.map(String.init).joined()
         print(initials)
-        let longest = tracks.max { $0.seconds < $1.seconds }.map { "\($0.title) \($0.seconds / 60):\($0.seconds % 60)" } ?? "none"
+        let longest =
+            tracks.max { $0.seconds < $1.seconds }.map { "\($0.title) \($0.seconds / 60):\($0.seconds % 60)" } ?? "none"
         print(longest)
-        let summary = tracks
+        let summary =
+            tracks
             .sorted { ($0.artist, $0.seconds) < ($1.artist, $1.seconds) }
             .enumerated()
             .map { "\($0.offset + 1). \($0.element.artist) – \($0.element.title)" }
