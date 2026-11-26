@@ -230,22 +230,9 @@ extension Evaluator {
         }
     }
 
-    /// The keys `name`'s values are written with, by the property each is for, when it declares
-    /// its own `CodingKeys`: a case's raw `String` value, or else its name. None when it doesn't:
-    /// each property is written by its name.
-    func codingKeys(of name: String) -> [String: String]? {
-        let keysName = "\(name).CodingKeys"
-        guard let keys = program.type(named: keysName), keys.isEnum else { return nil }
-        var named: [String: String] = [:]
-        for caseName in keys.caseNames {
-            if case .string(let written)? = rawValue(of: keysName, caseName) {
-                named[caseName] = written
-            } else {
-                named[caseName] = caseName
-            }
-        }
-        return named
-    }
+    /// The keys `name`'s values are written with, by the property each is for: none when it
+    /// declares no `CodingKeys`.
+    func codingKeys(of name: String) -> [String: String]? { program.codingKeys(of: name) }
 
     /// The stored property at `index` of `declaration` as it starts: its default value, or none
     /// for an optional that may change.

@@ -90,6 +90,36 @@ struct DeclarationsTests {
         #expect(userConformances == ["Actor", "Sendable"])
     }
 
+    /// A value with its own coding keys is declared as `Codable` writes it: each property its keys
+    /// name, by its key; one they leave out isn't part of it.
+    @Test func codingKeysNameAValuesFields() throws {
+        let code = """
+            actor Station {
+                struct Reading: Codable {
+                    let temperature: Double
+                    var note: String = ""
+                    let place: String
+
+                    enum CodingKeys: String, CodingKey {
+                        case temperature = "temperature_2m"
+                        case place
+                    }
+                }
+
+                func record(_ reading: Reading) {}
+            }
+            """
+        let (problems, declarations) = SwiftCheck.declarations(
+            of: "Station", in: "Object.swift", of: [.init(name: "Object.swift", code: code)])
+        #expect(problems.isEmpty, "\(problems)")
+        guard case .structure(let fields, _, _)? = declarations?["Station.Reading"] else {
+            Issue.record("no struct Station.Reading: \(String(describing: declarations))")
+            return
+        }
+        #expect(fields.map(\.name) == ["temperature_2m", "place"])
+        #expect(fields.map(\.type) == [.double, .string])
+    }
+
     /// Foundation's types are named only where Foundation is imported, as in Swift.
     @Test(arguments: ["import Foundation\n", "import FoundationEssentials\n", ""])
     func foundationIsNamedWhereItsImported(_ imports: String) throws {

@@ -22,7 +22,7 @@ public struct Declarations: Sendable, Equatable {
         public let documentation: String?
     }
 
-    /// A struct's or an actor's stored property.
+    /// A struct's or an actor's stored property: a struct's as `Codable` writes it, by its key.
     public struct Field: Sendable, Equatable {
         public let name: String
         public let type: SwiftType
@@ -135,8 +135,15 @@ private struct DeclarationReading {
                 fields: fields, methods: methods, conformances: conformances, documentation: documentation)
         case .structure:
             declarations[name] = .structure(fields: [], conformances: conformances, documentation: documentation)
-            declarations[name] = .structure(
-                fields: fields(of: declaration).map(\.field), conformances: conformances, documentation: documentation)
+            // As `Codable` writes its values: each property its `CodingKeys` names, by its key.
+            let keys = program.codingKeys(of: name)
+            let written = fields(of: declaration).map(\.field).compactMap { field -> Declarations.Field? in
+                guard let keys else { return field }
+                guard let key = keys[field.name] else { return nil }
+                return Declarations.Field(
+                    name: key, type: field.type, hasDefault: field.hasDefault, documentation: field.documentation)
+            }
+            declarations[name] = .structure(fields: written, conformances: conformances, documentation: documentation)
         case .enumeration:
             declarations[name] = .enumeration(cases: [], conformances: conformances, documentation: documentation)
             let cases = declaration.cases.map { enumCase in

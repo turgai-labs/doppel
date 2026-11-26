@@ -28,6 +28,22 @@ extension ResolvedProgram {
         resolver.propertyType(property, of: type)
     }
 
+    /// The keys the type `name`'s values are written with, by the property each is for, when it
+    /// declares its own `CodingKeys`: a case's raw `String` value, or else its name. None when it
+    /// doesn't: each property is written by its name.
+    package func codingKeys(of name: String) -> [String: String]? {
+        guard let keys = type(named: "\(name).CodingKeys"), keys.kind == .enumeration else { return nil }
+        var named: [String: String] = [:]
+        for caseName in keys.cases.map(\.name) {
+            if case .string(let written)? = rawValue(of: keys, case: caseName) {
+                named[caseName] = written
+            } else {
+                named[caseName] = caseName
+            }
+        }
+        return named
+    }
+
     package func rawValue(of type: TypeDeclaration, case name: String) -> RawValue? {
         guard let raw = type.rawType else { return nil }
         var next = 0
