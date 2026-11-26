@@ -170,7 +170,7 @@ extension Resolver {
             // whose getter is no more `async` or `throws` than the requirement's.
             var crosses = false
             for (property, requirement) in protocolType.properties.sorted(by: { $0.key < $1.key })
-            where !requirement.isStatic {
+            where !requirement.isStatic && requirement.isRequirement {
                 let required = propertyType(requirement, of: protocolType)
                 guard let witness = type.properties[property], !witness.isStatic,
                     infer(required, from: propertyType(witness, of: type), associated, &bindings),

@@ -13,7 +13,7 @@ extension Evaluator {
     static let jsonCoders: Set<String> = ["JSONDecoder", "JSONEncoder"]
 
     /// A coder's member: `decode(_:from:)`, `encode(_:)`.
-    func json(_ coder: String, _ name: String, _ arguments: [Value]) throws -> Value {
+    func json(_ coder: String, _ name: String, _ arguments: [Value]) async throws -> Value {
         switch (coder, name) {
         case ("JSONDecoder", "decode(_:from:)"):
             guard case .metatype(let type) = arguments[0], case .data(let bytes) = arguments[1] else { break }
@@ -24,7 +24,7 @@ extension Evaluator {
                 throw try thrown(Self.decodingError("The given data was not valid JSON."))
             }
             do {
-                return try value(read, as: type)
+                return try await value(read, as: type)
             } catch let trap as Trap {
                 // What doesn't fit its type is thrown as Swift's decoder throws it, said with where it is.
                 throw try thrown(Self.decodingError(trap.message))

@@ -14,6 +14,15 @@ enum FoundationLibrary {
     static let source = """
         typealias TimeInterval = Double
 
+        /// The whole number at or below `x`, as C's math library, which Foundation brings, gives it.
+        func floor(_ x: Double) -> Double { x.rounded(.down) }
+        /// The whole number at or above `x`.
+        func ceil(_ x: Double) -> Double { x.rounded(.up) }
+        /// The whole number nearest `x`, halfway ones away from zero.
+        func round(_ x: Double) -> Double { x.rounded(.toNearestOrAwayFromZero) }
+        /// `x` without what's after its point.
+        func trunc(_ x: Double) -> Double { x.rounded(.towardZero) }
+
         struct Date: Hashable, Comparable, Sendable, Codable, CustomStringConvertible {
             init()
             init(timeIntervalSinceNow: TimeInterval)
@@ -143,6 +152,24 @@ enum FoundationLibrary {
 
             static var whitespacesAndNewlines: CharacterSet { whitespaces.union(newlines) }
 
+            /// What a URL's query may hold as it is: letters, digits, and !$&'()*+,-./:;=?@_~.
+            static var urlQueryAllowed: CharacterSet { CharacterSet(charactersIn: "!$&'()*+,-./:;=?@_~").union(urlLettersAndDigits) }
+            /// What a URL's fragment may hold as it is: as its query.
+            static var urlFragmentAllowed: CharacterSet { urlQueryAllowed }
+            /// What a URL's path may hold as it is: letters, digits, and !$&'()*+,-./:;=@_~.
+            static var urlPathAllowed: CharacterSet { CharacterSet(charactersIn: "!$&'()*+,-./:;=@_~").union(urlLettersAndDigits) }
+            /// What a URL's host may hold as it is: letters, digits, and !$&'()*+,-.;=_~.
+            static var urlHostAllowed: CharacterSet { CharacterSet(charactersIn: "!$&'()*+,-.;=_~").union(urlLettersAndDigits) }
+            /// What a URL's user may hold as it is: letters, digits, and !$&'()*+,-.;=_~.
+            static var urlUserAllowed: CharacterSet { CharacterSet(charactersIn: "!$&'()*+,-.;=_~").union(urlLettersAndDigits) }
+            /// What a URL's password may hold as it is: as its user.
+            static var urlPasswordAllowed: CharacterSet { urlUserAllowed }
+
+            /// ASCII's letters and digits.
+            private static var urlLettersAndDigits: CharacterSet {
+                CharacterSet(lowers: [0x30, 0x41, 0x61], uppers: [0x39, 0x5A, 0x7A])
+            }
+
             func contains(_ member: Unicode.Scalar) -> Bool {
                 for index in 0..<lowers.count where lowers[index] <= member.value && member.value <= uppers[index] {
                     return true
@@ -269,6 +296,11 @@ enum FoundationLibrary {
 
             func dateComponents(_ components: Set<Component>, from start: Date, to end: Date) -> DateComponents {
                 _calendarDifference(self, components, start, end)
+            }
+
+            /// The values `smaller` takes in the `larger` that holds `date`: a month's days, a day's hours.
+            func range(of smaller: Component, in larger: Component, for date: Date) -> Range<Int>? {
+                _calendarRange(self, smaller, larger, date)
             }
 
             func date(from components: DateComponents) -> Date? {
@@ -426,6 +458,7 @@ enum FoundationLibrary {
         fileprivate func _calendarDifference(_ calendar: Calendar, _ components: Set<Calendar.Component>, _ start: Date, _ end: Date) -> DateComponents
         fileprivate func _calendarDate(_ calendar: Calendar, _ components: DateComponents) -> Date?
         fileprivate func _calendarStartOfDay(_ calendar: Calendar, _ date: Date) -> Date
+        fileprivate func _calendarRange(_ calendar: Calendar, _ smaller: Calendar.Component, _ larger: Calendar.Component, _ date: Date) -> Range<Int>?
         fileprivate func _calendarSameDay(_ calendar: Calendar, _ date1: Date, _ date2: Date) -> Bool
         fileprivate func _calendarIs(_ calendar: Calendar, _ question: String, _ date: Date) -> Bool
         fileprivate func _calendarSymbols(_ calendar: Calendar, _ which: String) -> [String]
@@ -433,6 +466,23 @@ enum FoundationLibrary {
         fileprivate func _iso8601(_ date: Date) -> String
 
         extension StringProtocol {
+            /// It with each scalar not in `allowedCharacters` written as its UTF-8 bytes, each a %
+            /// and two uppercase hexadecimal digits.
+            func addingPercentEncoding(withAllowedCharacters allowedCharacters: CharacterSet) -> String? {
+                var encoded = ""
+                for scalar in unicodeScalars {
+                    if allowedCharacters.contains(scalar) {
+                        encoded.unicodeScalars.append(scalar)
+                    } else {
+                        for byte in scalar.utf8 {
+                            encoded += byte < 16 ? "%0" : "%"
+                            encoded += String(byte, radix: 16, uppercase: true)
+                        }
+                    }
+                }
+                return encoded
+            }
+
             /// It without the scalars in `set` at either end.
             func trimmingCharacters(in set: CharacterSet) -> String {
                 let scalars = unicodeScalars

@@ -334,7 +334,7 @@ package final class Evaluator {
             for (label, value) in zip(labels, values) {
                 arguments.append((label, try portable(try await evaluate(value, in: frame), as: value.type)))
             }
-            return try value(
+            return try await value(
                 try await host.send(name, to: handle, through: messageType(receiver.type), arguments: arguments),
                 as: typed.type)
         case .witness(let receiver, let name, let labels, let values):
@@ -347,7 +347,7 @@ package final class Evaluator {
                 for (label, (value, typed)) in zip(labels, zip(evaluated, values)) {
                     arguments.append((label, try portable(value, as: typed.type)))
                 }
-                return try self.value(
+                return try await self.value(
                     try await host.send(name, to: handle, through: messageType(receiver.type), arguments: arguments),
                     as: typed.type)
             }
@@ -368,7 +368,7 @@ package final class Evaluator {
             guard case .object(let handle) = try await evaluate(receiver, in: frame) else {
                 throw Trap(message: "'\(name)' read of what isn't an object")
             }
-            return try value(try await host.read(name, of: handle), as: typed.type)
+            return try await value(try await host.read(name, of: handle), as: typed.type)
         case .array(let elements):
             var values: [Value] = []
             for element in elements { values.append(try await evaluate(element, in: frame)) }
@@ -574,7 +574,7 @@ package final class Evaluator {
                     try portable(value, as: index < types.count ? types[index] : .dynamic)
                 ))
         }
-        return try value(try await host.call(name, arguments: arguments), as: type)
+        return try await value(try await host.call(name, arguments: arguments), as: type)
     }
 
     // MARK: Types

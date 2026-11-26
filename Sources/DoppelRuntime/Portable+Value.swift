@@ -57,11 +57,14 @@ extension Evaluator {
         case (.tuple(let elements), _): return .array(try elements.map { try portable($0, as: .dynamic) })
         case (.structure(let name, let fields), _):
             guard let declaration = program.type(named: name) else { throw Trap(message: "no type '\(name)'") }
-            // As synthesized `Codable` writes it: an optional that's `nil` is left out.
+            // As synthesized `Codable` writes it: each property its keys name, by its key; an
+            // optional that's `nil` is left out.
+            let keys = codingKeys(of: name)
             return .object(
                 try zip(declaration.storedNames, fields).enumerated().compactMap { index, pair in
                     if case .optional(nil) = pair.1 { return nil }
-                    return (pair.0, try portable(pair.1, as: fieldType(declaration, index)))
+                    guard let key = keys.map({ $0[pair.0] }) ?? pair.0 else { return nil }
+                    return (key, try portable(pair.1, as: fieldType(declaration, index)))
                 })
         case (.enumCase(let name, let caseName, let values), _):
             guard let declaration = program.type(named: name) else { throw Trap(message: "no type '\(name)'") }
@@ -94,11 +97,11 @@ extension Evaluator {
 
     /// A portable value read as `type`, as `Codable` reads it. What isn't of its type is refused
     /// with where in the value it is, from `path`, as `DecodingError` gives its coding path.
-    func value(_ portable: Portable, as type: SwiftType, at path: ValuePath = ValuePath()) throws -> Value {
+    func value(_ portable: Portable, as type: SwiftType, at path: ValuePath = ValuePath()) async throws -> Value {
         switch (portable, type) {
         case (_, .unresolved), (_, .dynamic), (_, .existential), (_, .any): return shaped(portable)
         case (.null, .optional): return .optional(nil)
-        case (_, .optional(let wrapped)): return .optional(try value(portable, as: wrapped, at: path))
+        case (_, .optional(let wrapped)): return .optional(try await value(portable, as: wrapped, at: path))
         case (.int(let number), .int): return .int(number)
         case (.double(let number), .int) where number.rounded() == number: return .int(Int(number))
         case (.int(let number), .double): return .double(Double(number))
@@ -113,37 +116,45 @@ extension Evaluator {
             return exact
         case (.null, .void), (_, .void): return .void
         case (.array(let elements), .array(let element)):
-            return .array(try elements.enumerated().map { try value($1, as: element, at: path.appending(.index($0))) })
+            return .array(
+                try await elements.enumerated().mapInTurn {
+                    try await value($1, as: element, at: path.appending(.index($0)))
+                })
         case (.array(let elements), .named("Set", let arguments)) where arguments.count == 1:
             return .set(
                 try Self.unique(
-                    try elements.enumerated().map { try value($1, as: arguments[0], at: path.appending(.index($0))) }))
+                    try await elements.enumerated().mapInTurn {
+                        try await value($1, as: arguments[0], at: path.appending(.index($0)))
+                    }))
         case (.object(let members), .dictionary(.string, let valueType)):
             return .dictionary(
-                try members.map {
-                    (key: .string($0.0), value: try value($0.1, as: valueType, at: path.appending(.key($0.0))))
+                try await members.mapInTurn {
+                    (key: .string($0.0), value: try await value($0.1, as: valueType, at: path.appending(.key($0.0))))
                 })
         case (.object(let members), .dictionary(.int, let valueType)):
             return .dictionary(
-                try members.map { name, member in
+                try await members.mapInTurn { name, member in
                     guard let number = Int(name) else {
                         throw path.appending(.key(name)).mismatch("\"\(name)\" isn't an 'Int' key")
                     }
-                    return (key: .int(number), value: try value(member, as: valueType, at: path.appending(.key(name))))
+                    return (
+                        key: .int(number), value: try await value(member, as: valueType, at: path.appending(.key(name)))
+                    )
                 })
         case (.array(let elements), .dictionary(let key, let valueType)) where elements.count % 2 == 0:
             // Keys and values in turn, as `Codable` writes a dictionary whose keys aren't strings.
             return .dictionary(
-                try stride(from: 0, to: elements.count, by: 2).map { index in
+                try await stride(from: 0, to: elements.count, by: 2).mapInTurn { index in
                     (
-                        key: try value(elements[index], as: key, at: path.appending(.index(index))),
-                        value: try value(elements[index + 1], as: valueType, at: path.appending(.index(index + 1)))
+                        key: try await value(elements[index], as: key, at: path.appending(.index(index))),
+                        value: try await value(
+                            elements[index + 1], as: valueType, at: path.appending(.index(index + 1)))
                     )
                 })
         case (.array(let elements), .tuple(let types, _)) where elements.count == types.count:
             return .tuple(
-                try zip(elements, types).enumerated().map {
-                    try value($1.0, as: $1.1, at: path.appending(.member("\($0)")))
+                try await zip(elements, types).enumerated().mapInTurn {
+                    try await value($1.0, as: $1.1, at: path.appending(.member("\($0)")))
                 })
         // An object is only an actor's, and of the type wanted when it says what it is: another
         // type is never one. One that doesn't say is checked when it's called.
@@ -162,15 +173,21 @@ extension Evaluator {
             guard let declaration = program.type(named: name) else { throw Trap(message: "no type '\(name)'") }
             if declaration.isStruct || declaration.kind == .standard {
                 guard case .object = portable else { throw path.mismatch("\(portable) isn't \(Self.a(name))") }
+                // Each property read by its key; one its keys don't name keeps its default value,
+                // as synthesized `Codable` reads it.
+                let keys = codingKeys(of: name)
                 return .structure(
                     name,
-                    try declaration.storedNames.enumerated().map { index, field in
+                    try await declaration.storedNames.enumerated().mapInTurn { index, field in
                         let fieldType = fieldType(declaration, index)
-                        guard let member = portable[field] else {
-                            if case .optional = fieldType { return .optional(nil) }
-                            throw path.mismatch("\(Self.a(name)) needs '\(field)'")
+                        guard let key = keys.map({ $0[field] }) ?? field else {
+                            return try await startingValue(of: index, in: declaration)
                         }
-                        return try value(member, as: fieldType, at: path.appending(.member(field)))
+                        guard let member = portable[key] else {
+                            if case .optional = fieldType { return .optional(nil) }
+                            throw path.mismatch("\(Self.a(name)) needs '\(key)'")
+                        }
+                        return try await value(member, as: fieldType, at: path.appending(.member(key)))
                     })
             }
             if declaration.isEnum {
@@ -194,13 +211,13 @@ extension Evaluator {
                     let parameters = declaration.caseValues(caseName)
                     return .enumCase(
                         name, caseName,
-                        try parameters.enumerated().map { index, parameter in
+                        try await parameters.enumerated().mapInTurn { index, parameter in
                             let key = parameter.label ?? "_\(index)"
                             guard let member = payload[key] else {
                                 if case .optional = parameter.type { return .optional(nil) }
                                 throw path.mismatch("'\(name).\(caseName)' needs '\(key)'")
                             }
-                            return try value(
+                            return try await value(
                                 member, as: parameter.type,
                                 at: path.appending(.member(caseName)).appending(.member(key)))
                         })
@@ -211,6 +228,33 @@ extension Evaluator {
         default:
             throw path.mismatch("\(portable) isn't \(Self.a("\(type)"))")
         }
+    }
+
+    /// The keys `name`'s values are written with, by the property each is for, when it declares
+    /// its own `CodingKeys`: a case's raw `String` value, or else its name. None when it doesn't:
+    /// each property is written by its name.
+    func codingKeys(of name: String) -> [String: String]? {
+        let keysName = "\(name).CodingKeys"
+        guard let keys = program.type(named: keysName), keys.isEnum else { return nil }
+        var named: [String: String] = [:]
+        for caseName in keys.caseNames {
+            if case .string(let written)? = rawValue(of: keysName, caseName) {
+                named[caseName] = written
+            } else {
+                named[caseName] = caseName
+            }
+        }
+        return named
+    }
+
+    /// The stored property at `index` of `declaration` as it starts: its default value, or none
+    /// for an optional that may change.
+    func startingValue(of index: Int, in declaration: TypeDeclaration) async throws -> Value {
+        let property = declaration.storedProperty(index)
+        if let value = program.startingValue(of: property, in: declaration) {
+            return try await evaluate(value.value, in: Frame(slots: value.slots, parent: nil, selfValue: nil))
+        }
+        return .optional(nil)
     }
 
     /// A type's name with its article, as said: "a 'Date'", "an 'Int'".
@@ -239,5 +283,14 @@ extension Evaluator {
     static func text(_ value: Value) -> String? {
         if case .string(let text) = value { return text }
         return nil
+    }
+}
+
+extension Sequence {
+    /// Each element made into another in turn, each awaited before the next.
+    fileprivate func mapInTurn<T>(_ transform: (Element) async throws -> T) async throws -> [T] {
+        var made: [T] = []
+        for element in self { made.append(try await transform(element)) }
+        return made
     }
 }

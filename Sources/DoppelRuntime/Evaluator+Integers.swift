@@ -185,12 +185,18 @@ extension Evaluator {
     }
 
     /// Text as an integer of a type, as `init?(_:)` reads it.
-    static func integer(_ text: String, as kind: FixedInteger) -> Value {
-        Self.parsedText(text, kind.integerType, kind: kind)
+    /// `text` as an integer of `kind`, `Int` for none, written in `radix`: none when it isn't one;
+    /// a radix outside 2 through 36 stops the program, as Swift's does.
+    static func integer(_ text: String, radix: Int, as kind: FixedInteger?) throws -> Value {
+        guard (2...36).contains(radix) else { throw Trap(message: "Fatal error: Radix must be between 2 and 36") }
+        guard let kind else { return .optional(Int(text, radix: radix).map(Value.int)) }
+        return Self.parsedText(text, radix: radix, kind.integerType, kind: kind)
     }
 
-    private static func parsedText<T: FixedWidthInteger>(_ text: String, _ type: T.Type, kind: FixedInteger) -> Value {
-        .optional(T(text).map { Integer.made($0, as: kind) })
+    private static func parsedText<T: FixedWidthInteger>(_ text: String, radix: Int, _ type: T.Type, kind: FixedInteger)
+        -> Value
+    {
+        .optional(T(text, radix: radix).map { Integer.made($0, as: kind) })
     }
 
     /// A type's `max`, `min` and `bitWidth`.

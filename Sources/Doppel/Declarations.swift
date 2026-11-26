@@ -97,6 +97,18 @@ package struct Property {
     /// Whether it's set without changing the value it's on, `{ get nonmutating set }`: set even on
     /// a constant, as a continuation's `onTermination` is.
     package var isNonmutatingSet = false
+
+    /// Whether it's declared in a protocol's own body: a requirement, rather than what one of the
+    /// protocol's extensions gives the types conforming.
+    package var isRequirement: Bool {
+        var node = syntax?.parent
+        while let current = node {
+            if current.is(ProtocolDeclSyntax.self) { return true }
+            if current.is(ExtensionDeclSyntax.self) { return false }
+            node = current.parent
+        }
+        return false
+    }
 }
 
 /// A function, method or initializer, as declared.

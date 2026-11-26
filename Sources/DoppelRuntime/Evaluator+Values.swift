@@ -168,6 +168,27 @@ extension Evaluator {
 
     // MARK: Describing
 
+    /// Whether the enum `type` is one of coding keys.
+    func isCodingKey(_ type: String) -> Bool {
+        program.type(named: type)?.conformances.contains("CodingKey") ?? false
+    }
+
+    /// A coding key's text and number, as Swift synthesizes them: its raw `String` value or else its
+    /// case's name; its raw `Int` value, when it has one.
+    func codingKey(_ type: String, _ caseName: String) -> (text: String, number: Int?) {
+        let raw = rawValue(of: type, caseName)
+        let text: String = if case .string(let written)? = raw { written } else { caseName }
+        let number: Int? = if case .int(let written)? = raw { written } else { nil }
+        return (text, number)
+    }
+
+    /// A coding key as Swift says it: `CodingKeys(stringValue: "name", intValue: nil)`.
+    func codingKeyDescription(_ type: String, _ caseName: String) -> String {
+        let key = codingKey(type, caseName)
+        let shortName = type.split(separator: ".").last.map(String.init) ?? type
+        return "\(shortName)(stringValue: \"\(key.text)\", intValue: \(key.number.map(String.init) ?? "nil"))"
+    }
+
     /// A value as `String(describing:)` writes it, as an interpolation does: a struct with its
     /// properties' labels, an enum's case with its values'.
     func describe(_ value: Value) -> String {
@@ -176,7 +197,8 @@ extension Evaluator {
         case .character(let character): String(character)
         case .structure("Unicode.Scalar", let fields): (try? Self.unicodeScalar(fields)).map { String($0) } ?? ""
         case .metatype(let type): type.printedName
-
+        case .enumCase(let type, let caseName, let values) where values.isEmpty && isCodingKey(type):
+            codingKeyDescription(type, caseName)
         default: debugDescribe(value, top: true)
         }
     }
@@ -209,6 +231,8 @@ extension Evaluator {
             // Inside a collection, or an optional, Swift writes a type with its module and the
             // types it's in; on its own, by its name alone.
             return top ? "\(Self.ownName(name))(\(fields))" : "\(module).\(name)(\(fields))"
+        case .enumCase(let typeName, let name, let values) where values.isEmpty && isCodingKey(typeName):
+            return codingKeyDescription(typeName, name)
         case .enumCase(let typeName, let name, let values):
             let qualified = top ? name : "\(module).\(typeName).\(name)"
             guard !values.isEmpty else { return qualified }
@@ -251,7 +275,7 @@ extension Evaluator {
     func cast(_ value: Value, from source: SwiftType, to target: SwiftType, _ kind: Cast) async throws -> Value {
         let converted: Value?
         do {
-            converted = try runtimeValue(value, from: source, as: target)
+            converted = try await runtimeValue(value, from: source, as: target)
         } catch {
             converted = nil
         }
@@ -264,20 +288,22 @@ extension Evaluator {
         }
     }
 
-    private func runtimeValue(_ value: Value, from source: SwiftType, as target: SwiftType) throws -> Value? {
+    private func runtimeValue(_ value: Value, from source: SwiftType, as target: SwiftType) async throws -> Value? {
         switch (source, target) {
         case (.dynamic, _), (.existential, _), (.unresolved, _):
-            return try self.value(try portable(value, as: .dynamic), as: target)
+            return try await self.value(try portable(value, as: .dynamic), as: target)
         case (.optional(let wrapped), .optional(let targetWrapped)):
             guard case .optional(let inner?) = value else { return .optional(nil) }
-            return try runtimeValue(inner, from: wrapped, as: targetWrapped).map { .optional($0) }
+            return try await runtimeValue(inner, from: wrapped, as: targetWrapped).map { .optional($0) }
         case (_, .optional(let wrapped)):
-            return try runtimeValue(value, from: source, as: wrapped).map { .optional($0) }
+            return try await runtimeValue(value, from: source, as: wrapped).map { .optional($0) }
         case (.array(let element), .array(let targetElement)):
             guard case .array(let elements) = value else { return nil }
             var made: [Value] = []
             for element_ in elements {
-                guard let converted = try runtimeValue(element_, from: element, as: targetElement) else { return nil }
+                guard let converted = try await runtimeValue(element_, from: element, as: targetElement) else {
+                    return nil
+                }
                 made.append(converted)
             }
             return .array(made)

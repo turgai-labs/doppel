@@ -51,6 +51,10 @@ extension Evaluator {
                     try components(arguments[1]), from: try date(arguments[2]), to: try date(arguments[3])))
         case "_calendarDate(_:_:)":
             return .optional(try calendar(arguments[0]).date(from: try dateComponents(arguments[1])).map(Value.date))
+        case "_calendarRange(_:_:_:_:)":
+            let range = try calendar(arguments[0]).range(
+                of: try Self.component(arguments[1]), in: try Self.component(arguments[2]), for: try date(arguments[3]))
+            return .optional(range.map { .structure("Range", [.int($0.lowerBound), .int($0.upperBound)]) })
         case "_calendarStartOfDay(_:_:)":
             return .date(try calendar(arguments[0]).startOfDay(for: try date(arguments[1])))
         case "_calendarSameDay(_:_:_:)":

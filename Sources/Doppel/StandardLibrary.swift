@@ -16,6 +16,19 @@ enum StandardLibrary {
         protocol Encodable {}
         protocol Decodable {}
         protocol Codable: Encodable, Decodable {}
+
+        /// What a type's values are written with, its properties each by its key: a type's own
+        /// `CodingKeys` names which of them are written, and how.
+        protocol CodingKey: Sendable, CustomStringConvertible {}
+
+        // What Swift synthesizes for an enum of keys.
+        extension CodingKey {
+            /// Its raw `String` value, or else its case's name.
+            var stringValue: String { get }
+            /// Its raw `Int` value, when it has one.
+            var intValue: Int? { get }
+            var description: String { get }
+        }
         protocol Identifiable {}
         protocol CaseIterable {}
         protocol BinaryInteger: Hashable, Comparable, CustomStringConvertible {}
@@ -26,13 +39,26 @@ enum StandardLibrary {
 
         struct Int: Sendable, Codable, FixedWidthInteger, CVarArg {}
 
+        /// How a floating-point value is rounded to a whole one.
+        enum FloatingPointRoundingRule: Hashable, Sendable {
+            case toNearestOrAwayFromZero
+            case toNearestOrEven
+            case up
+            case down
+            case towardZero
+            case awayFromZero
+        }
+
         struct Double: Hashable, Comparable, Sendable, Codable, CustomStringConvertible, CVarArg {
             init(_ value: Double)
             init(_ value: Int)
             init<T: BinaryInteger>(_ value: T)
-            init?(_ text: String)
+            init?<S: StringProtocol>(_ text: S)
             var description: String { get }
             func rounded() -> Double
+            func rounded(_ rule: FloatingPointRoundingRule) -> Double
+            mutating func round()
+            mutating func round(_ rule: FloatingPointRoundingRule)
         }
 
         struct Bool: Hashable, Sendable, Codable, CustomStringConvertible {
@@ -380,6 +406,17 @@ enum StandardLibrary {
             func contains(_ element: Bound) -> Bool {
                 lowerBound <= element && element <= upperBound
             }
+        }
+
+        // Whole numbers' ranges are collections, as Swift's are: how many they hold.
+        extension Range where Bound == Int {
+            var count: Int { upperBound - lowerBound }
+            var isEmpty: Bool { lowerBound == upperBound }
+        }
+
+        extension ClosedRange where Bound == Int {
+            var count: Int { upperBound - lowerBound + 1 }
+            var isEmpty: Bool { false }
         }
 
         /// What `String` and `Substring` are both: text, a collection of characters.
@@ -1045,7 +1082,7 @@ enum StandardLibrary {
         }
 
         extension FixedWidthInteger {
-            init?(_ text: String)
+            init?<S: StringProtocol>(_ text: S, radix: Int = 10)
             static var max: Self { get }
             static var min: Self { get }
             static var bitWidth: Int { get }

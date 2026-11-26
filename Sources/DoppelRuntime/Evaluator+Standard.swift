@@ -19,7 +19,15 @@ extension Evaluator {
             return try foundationString(name, base, arguments)
         case (let type, nil) where Self.jsonCoders.contains(type) && name == "init()": return .structure(type, [])
         case (_, .structure(let coder, _)?) where Self.jsonCoders.contains(coder):
-            return try json(coder, name, arguments)
+            return try await json(coder, name, arguments)
+        // A coding key, as Swift's synthesized one says itself.
+        case (_, .enumCase(let type, let caseName, _)?) where ["stringValue", "intValue", "description"].contains(name):
+            let key = codingKey(type, caseName)
+            switch name {
+            case "stringValue": return .string(key.text)
+            case "intValue": return .optional(key.number.map(Value.int))
+            default: return .string(codingKeyDescription(type, caseName))
+            }
         case (let type, nil) where Self.foundationTypes.contains(type):
             return name.hasPrefix("init(")
                 ? try foundationInitializer(type, name, arguments) : try foundationStatic(type, name)
@@ -41,6 +49,7 @@ extension Evaluator {
             switch name {
             case "description": return .string("\(number)")
             case "rounded()": return .double(number.rounded())
+            case "rounded(_:)": return .double(number.rounded(try Self.roundingRule(arguments[0])))
             default: break
             }
         case (_, .bool(let flag)?) where name == "description": return .string("\(flag)")
@@ -204,6 +213,14 @@ extension Evaluator {
             guard member.member == "toggle()" else { break }
             value = .bool(!flag)
             return .void
+        case .double(var number):
+            switch member.member {
+            case "round()": number.round()
+            case "round(_:)": number.round(try Self.roundingRule(arguments[0]))
+            default: throw Trap(message: "'Double.\(member.member)' isn't run by Doppel yet")
+            }
+            value = .double(number)
+            return .void
         default:
             break
         }
@@ -299,7 +316,8 @@ extension Evaluator {
             case ("init(_:)", let source?), ("init(truncatingIfNeeded:)", let source?), ("init(exactly:)", let source?):
                 if let whole = Integer(source) { return try integer(whole, as: kind, name) }
                 if case .double(let number) = source, name == "init(_:)" { return try integer(number, as: kind) }
-                if case .string(let text) = source, let kind { return Self.integer(text, as: kind) }
+            case ("init(_:radix:)", .string(let text)?):
+                return try Self.integer(text, radix: try int(arguments[1]), as: kind)
             default: break
             }
         }
@@ -328,7 +346,6 @@ extension Evaluator {
                 throw Trap(message: "Double value cannot be converted to Int because it is either infinite or NaN")
             }
             return .int(Int(number))
-        case ("Int", "init(_:)", .string(let text)?): return .optional(Int(text).map(Value.int))
         case ("Double", "init(_:)", .int(let number)?): return .double(Double(number))
         case ("Double", "init(_:)", .double(let number)?): return .double(number)
         case ("Double", "init(_:)", .string(let text)?): return .optional(Double(text).map(Value.double))
@@ -678,6 +695,19 @@ extension Evaluator {
         guard case .string(let text) = value else { throw Trap(message: "not a String") }
         return text
     }
+
+    /// A rounding rule, as code names it.
+    static func roundingRule(_ value: Value) throws -> FloatingPointRoundingRule {
+        guard case .enumCase(_, let name, _) = value, let rule = roundingRules[name] else {
+            throw Trap(message: "not a FloatingPointRoundingRule")
+        }
+        return rule
+    }
+
+    private static let roundingRules: [String: FloatingPointRoundingRule] = [
+        "toNearestOrAwayFromZero": .toNearestOrAwayFromZero, "toNearestOrEven": .toNearestOrEven, "up": .up,
+        "down": .down, "towardZero": .towardZero, "awayFromZero": .awayFromZero,
+    ]
 
     func array(_ value: Value) throws -> [Value] {
         guard case .array(let elements) = value else { throw Trap(message: "not an Array") }

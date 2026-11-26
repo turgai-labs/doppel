@@ -33,7 +33,8 @@ public final class LiveActor {
         }
         var values: [Value] = []
         for (parameter, argument) in zip(chosen?.parameters ?? [], arguments) {
-            values.append(try evaluator.value(argument.value, as: parameter.type, at: ValuePath(named: parameter.name)))
+            values.append(
+                try await evaluator.value(argument.value, as: parameter.type, at: ValuePath(named: parameter.name)))
         }
         guard
             case .actor(let instance) = try await evaluator.make(
@@ -86,7 +87,7 @@ public final class LiveActor {
                         value.value, in: Frame(slots: value.slots, parent: nil, selfValue: nil)))
                 continue
             }
-            values.append(try evaluator.value(given, as: parameter.type, at: ValuePath(named: parameter.name)))
+            values.append(try await evaluator.value(given, as: parameter.type, at: ValuePath(named: parameter.name)))
         }
         let result = try await evaluator.run(
             evaluator.program.body(of: method), on: .actor(instance), arguments: values)
@@ -101,11 +102,11 @@ public final class LiveActor {
     }
 
     /// One of its stored properties given a value, read as its type: what it held before it started again.
-    public func set(_ name: String, to value: Portable) throws {
+    public func set(_ name: String, to value: Portable) async throws {
         guard let index = declaration.storedNames.firstIndex(of: name) else {
             throw Trap(message: "'\(declaration.name)' holds no '\(name)'")
         }
-        instance.fields[index] = try evaluator.value(
+        instance.fields[index] = try await evaluator.value(
             value, as: evaluator.fieldType(declaration, index), at: ValuePath(named: name))
     }
 
